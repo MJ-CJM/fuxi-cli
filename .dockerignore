@@ -1,0 +1,57 @@
+# Dependencies - MUST be installed in container to avoid platform mismatch
+# (esbuild and other native modules need platform-specific binaries)
+node_modules
+package-lock.json
+npm-shrinkwrap.json
+
+# Build outputs - generated in container
+dist
+bundle
+*.tsbuildinfo
+
+# Git - Keep .git for build scripts that need git info
+# .git directory is needed for generate-git-commit-info.js
+# .gitignore
+
+# IDE and editor files
+.idea
+*.iml
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+coverage
+.integration-tests/
+junit.xml
+*.log
+
+# Environment files
+.env
+.env~
+
+# Generated files
+packages/cli/src/generated/
+packages/core/src/generated/
+packages/vscode-ide-companion/*.vsix
+
+# Docker
+.docker
+Dockerfile
+Dockerfile.dev
+
+# Documentation (optional, can be included if needed)
+# docs/
+# README.md
+
+# Temporary files
+*.tmp
+*.temp
+op_log/
+lecture/
+gha-creds-*.json
+

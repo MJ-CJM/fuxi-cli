@@ -41,17 +41,7 @@
 
 ### 安装
 
-#### 方式一：NPM 全局安装（推荐）
-
-```bash
-# 全局安装
-npm install -g fuxi-cli
-
-# 启动
-fuxi-cli
-```
-
-#### 方式二：源码安装
+#### 方式一：源码安装
 
 ```bash
 # 克隆仓库
@@ -68,10 +58,46 @@ npm run build
 npm start
 ```
 
+#### 方式二：Docker 开发环境（推荐用于开发）
+
+使用 Docker 容器进行开发，无需在本地安装 Node.js 等依赖：
+
+```bash
+# 克隆仓库
+git clone https://github.com/chenjiamin/fuxi-cli.git
+cd fuxi-cli
+
+# 构建开发镜像
+docker build -f Dockerfile.dev -t fuxi-cli-dev .
+
+# 删除本地 node_modules（如果存在，避免平台不匹配和符号链接冲突）
+rm -rf node_modules
+
+# 在容器内安装依赖（使用 --rm 而不是 -it，避免交互式终端导致的卡住问题）
+docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm install
+
+# 构建项目
+docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm run build
+
+# 如果遇到符号链接冲突错误（EEXIST），先清理再重新安装：
+# docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm run clean
+# docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm install
+
+# 编译产物在本地 bundle/ 目录，可直接使用
+node bundle/fuxi-cli.js
+```
+
+详细文档请参考：[Docker 开发环境指南](./docs/dev-docker.md)
+
 ### 系统要求
 
+**源码安装方式：**
 - Node.js 20.0.0 或更高版本
 - macOS、Linux 或 Windows
+
+**Docker 开发环境：**
+- Docker 20.10 或更高版本
+- macOS、Linux 或 Windows（需要 Docker Desktop）
 
 ---
 
