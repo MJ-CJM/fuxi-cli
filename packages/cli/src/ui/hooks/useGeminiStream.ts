@@ -616,6 +616,62 @@ export const useGeminiStream = (
 
   // --- Stream Event Handlers ---
 
+  /**
+   * Detects and parses XML format tool calls from text (e.g., <function=read_file>...)
+   * This is a fallback for models that output XML instead of standard function calls
+   */
+  const parseXmlToolCalls = useCallback(
+    (text: string, prompt_id?: string): ToolCallRequestInfo[] => {
+      const toolCalls: ToolCallRequestInfo[] = [];
+      
+      // Pattern to match XML-style tool calls like:
+      // <function=read_file>
+      //   <parameter=absolute_path>/path/to/file</parameter>
+      // </function>
+      const xmlToolCallPattern = /<function=(\w+)>([\s\S]*?)<\/function>/g;
+      let match;
+      
+      while ((match = xmlToolCallPattern.exec(text)) !== null) {
+        const toolName = match[1];
+        const paramsText = match[2];
+        const args: Record<string, any> = {};
+        
+        // Parse parameters from XML format
+        // <parameter=param_name>value</parameter>
+        const paramPattern = /<parameter=(\w+)>([\s\S]*?)<\/parameter>/g;
+        let paramMatch;
+        
+        while ((paramMatch = paramPattern.exec(paramsText)) !== null) {
+          const paramName = paramMatch[1];
+          let paramValue = paramMatch[2].trim();
+          
+          // Try to parse as JSON if it looks like JSON
+          try {
+            if (paramValue.startsWith('[') || paramValue.startsWith('{')) {
+              paramValue = JSON.parse(paramValue);
+            }
+          } catch {
+            // Keep as string if not valid JSON
+          }
+          
+          args[paramName] = paramValue;
+        }
+        
+        // Create tool call request
+        toolCalls.push({
+          callId: `${toolName}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name: toolName,
+          args,
+          isClientInitiated: false,
+          prompt_id: prompt_id || '',
+        });
+      }
+      
+      return toolCalls;
+    },
+    [],
+  );
+
   const handleContentEvent = useCallback(
     (
       eventValue: ContentEvent['value'],
@@ -954,6 +1010,7 @@ export const useGeminiStream = (
       stream: AsyncIterable<GeminiEvent>,
       userMessageTimestamp: number,
       signal: AbortSignal,
+      prompt_id?: string,
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
@@ -1019,6 +1076,41 @@ export const useGeminiStream = (
           }
         }
       }
+      
+      // After stream processing, check for XML format tool calls in the final buffer
+      // This handles cases where models output XML instead of standard function calls
+      const finalBuffer = pendingHistoryItemRef.current?.text || geminiMessageBuffer;
+      if (finalBuffer) {
+        const xmlToolCalls = parseXmlToolCalls(finalBuffer, prompt_id);
+        if (xmlToolCalls.length > 0) {
+          // Remove XML tool calls from the displayed text
+          // Match patterns like: <function=name>...</function></tool_call>
+          let cleanedText = finalBuffer;
+          cleanedText = cleanedText.replace(/✦\s*<function=[^>]*>[\s\S]*?<\/function>\s*<\/tool_call>/g, '');
+          cleanedText = cleanedText.replace(/<function=[^>]*>[\s\S]*?<\/function>\s*<\/tool_call>/g, '');
+          
+          // Update the pending history item with cleaned text
+          if (pendingHistoryItemRef.current) {
+            setPendingHistoryItem({
+              type: pendingHistoryItemRef.current.type as 'gemini' | 'gemini_content',
+              text: cleanedText.trim(),
+            });
+          }
+          
+          // Add parsed tool calls to the request list
+          toolCallRequests.push(...xmlToolCalls);
+          
+          // Show info message about XML tool call detection
+          addItem(
+            {
+              type: MessageType.INFO,
+              text: `⚠️  Detected ${xmlToolCalls.length} XML format tool call(s). Attempting to parse and execute...`,
+            },
+            userMessageTimestamp,
+          );
+        }
+      }
+      
       if (toolCallRequests.length > 0) {
         scheduleToolCalls(toolCallRequests, signal);
       }
@@ -1034,6 +1126,11 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
+      parseXmlToolCalls,
+      planModeActive,
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
     ],
   );
 
@@ -1108,6 +1205,7 @@ export const useGeminiStream = (
             stream,
             userMessageTimestamp,
             abortSignal,
+            prompt_id,
           );
 
           if (processingStatus === StreamProcessingStatus.UserCancelled) {

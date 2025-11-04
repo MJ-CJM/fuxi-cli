@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="./images/logo.jpg" alt="伏羲 CLI Logo" width="200"/>
+</p>
+
+<p align="center">
+  <strong>
+    <a href="README.md">简体中文</a> | 
+    <a href="README_EN.md">English</a>
+  </strong>
+</p>
+
 # 伏羲 CLI (fuxi-cli)
 
 <p align="center">

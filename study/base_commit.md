@@ -130,7 +130,7 @@ M    packages/cli/src/ui/components/AsciiArt.ts
 
 **代码要点与行为变化**
 1. **AsciiArt.ts 修改**: 更新 ASCII 艺术标识
-   - 可能添加 "tiangong"（天工）相关标记或 logo
+   - 可能添加 "fuxi"（伏羲）相关标记或 logo
    - 影响 CLI 启动时的视觉展示
 
 **功能解读与影响评估**
