@@ -36,6 +36,20 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 # Set working directory
 WORKDIR /workspace
 
+# Configure npm for better output in Docker
+# (progress=true shows installation progress, useful for debugging)
+ENV NPM_CONFIG_PROGRESS=true
+ENV NPM_CONFIG_LOGLEVEL=info
+
+# Proxy configuration (optional, can be overridden at runtime via -e flags)
+# Uncomment and set if you need proxy for npm install and build
+# ARG HTTP_PROXY
+# ARG HTTPS_PROXY
+# ARG NO_PROXY
+# ENV HTTP_PROXY=${HTTP_PROXY}
+# ENV HTTPS_PROXY=${HTTPS_PROXY}
+# ENV NO_PROXY=${NO_PROXY}
+
 # Switch to non-root user node
 USER node
 

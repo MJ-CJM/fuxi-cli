@@ -30,7 +30,12 @@ const root = join(__dirname, '..');
 const nodeModulesPath = join(root, 'node_modules');
 if (!existsSync(nodeModulesPath)) {
   console.log('node_modules not found, running npm install...');
+  console.log('This may take a few minutes on first run. Please wait...');
+  // Set npm config to show progress for better feedback
+  process.env.NPM_CONFIG_PROGRESS = 'true';
+  process.env.NPM_CONFIG_LOGLEVEL = 'info';
   execSync('npm install', { stdio: 'inherit', cwd: root });
+  console.log('npm install completed successfully.');
 } else {
   // node_modules exists, but try to verify it's working
   // If npm install fails, it might be due to broken symlinks in workspaces

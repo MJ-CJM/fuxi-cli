@@ -58,34 +58,78 @@ npm run build
 npm start
 ```
 
-#### 方式二：Docker 开发环境（推荐用于开发）
+#### 方式二：Docker 开发环境
 
-使用 Docker 容器进行开发，无需在本地安装 Node.js 等依赖：
+**部署模式说明**：
+- **文件映射模式**（默认）：代码通过 volume 映射到容器，适合开发调试
+- **完整打包模式**：代码和依赖都打包到镜像，适合生产部署
+
+##### 文件映射模式（推荐用于开发）
+
+**说明**：代码通过 volume 映射到容器内，编译产物输出到本地。修改代码后无需重建镜像。
 
 ```bash
 # 克隆仓库
 git clone https://github.com/chenjiamin/fuxi-cli.git
 cd fuxi-cli
 
-# 构建开发镜像
+# 构建开发镜像（只包含编译工具，不包含代码）
 docker build -f Dockerfile.dev -t fuxi-cli-dev .
 
 # 删除本地 node_modules（如果存在，避免平台不匹配和符号链接冲突）
 rm -rf node_modules
 
-# 在容器内安装依赖（使用 --rm 而不是 -it，避免交互式终端导致的卡住问题）
-docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm install
-
-# 构建项目
+# 构建项目（代码通过 -v $(pwd):/workspace 映射到容器内）
+# 编译产物会直接输出到本地的 bundle/ 目录
 docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm run build
 
-# 如果遇到符号链接冲突错误（EEXIST），先清理再重新安装：
-# docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm run clean
-# docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm install
+# 如果需要代理（内网环境）：
+# docker run --rm -v $(pwd):/workspace -w /workspace \
+#   -e HTTP_PROXY="http://proxy.example.com:8080" \
+#   -e HTTPS_PROXY="http://proxy.example.com:8080" \
+#   fuxi-cli-dev npm run build
 
 # 编译产物在本地 bundle/ 目录，可直接使用
 node bundle/fuxi-cli.js
 ```
+
+**特点**：
+- 代码在本地，通过 `-v $(pwd):/workspace` 映射到容器
+- 修改代码后，重新运行构建命令即可，无需重建镜像
+- 编译产物在本地 `bundle/` 目录
+
+##### 完整打包模式（适合生产部署）
+
+**说明**：将代码和所有依赖都打包到镜像中，生成自包含镜像，无需挂载代码目录。
+
+```bash
+# 构建生产镜像（代码和依赖都打包到镜像中）
+docker build -f Dockerfile.prod -t fuxi-cli:latest .
+
+# 如果需要在构建时使用代理（内网环境）：
+# docker build \
+#   --build-arg HTTP_PROXY="http://proxy.example.com:8080" \
+#   --build-arg HTTPS_PROXY="http://proxy.example.com:8080" \
+#   -f Dockerfile.prod \
+#   -t fuxi-cli:latest .
+
+# 运行镜像（无需挂载代码目录，镜像已包含所有内容）
+docker run -it --rm fuxi-cli:latest
+
+# 挂载配置文件目录（如果需要读取 ~/.gemini/config.json）
+docker run -it --rm \
+  -v ~/.gemini:/home/node/.gemini \
+  fuxi-cli:latest
+
+# 或非交互式运行
+docker run --rm fuxi-cli:latest "你的问题"
+```
+
+**特点**：
+- 镜像自包含，代码和依赖都在镜像中
+- 无需挂载代码目录，可直接运行
+- 适合生产部署和镜像分发
+- 修改代码后需要重新构建镜像
 
 详细文档请参考：[Docker 开发环境指南](./docs/dev-docker.md)
 
@@ -98,6 +142,60 @@ node bundle/fuxi-cli.js
 **Docker 开发环境：**
 - Docker 20.10 或更高版本
 - macOS、Linux 或 Windows（需要 Docker Desktop）
+
+### 内网运行配置
+
+项目默认使用公共 npm registry (`registry.npmjs.org`)。如果需要在内网环境运行，可以配置内网 npm 镜像源：
+
+#### 方法 1：使用内网镜像源（推荐）
+
+在项目根目录创建或修改 `.npmrc` 文件：
+
+```bash
+# 使用内网 npm 镜像源
+registry=https://your-internal-npm-registry.com/
+```
+
+或者仅为 `@google/*` 包配置内网源：
+
+```bash
+# 仅 @google/* 包使用内网源，其他包使用公共 registry
+@google:registry=https://your-internal-npm-registry.com/
+registry=https://registry.npmjs.org/
+```
+
+#### 方法 2：参考示例配置
+
+项目提供了 `.npmrc.internal.example` 示例文件，包含多种内网配置方案：
+
+```bash
+# 查看示例配置
+cat .npmrc.internal.example
+
+# 复制并修改为你的配置
+cp .npmrc.internal.example .npmrc
+```
+
+#### 方法 3：离线安装
+
+如果完全无法访问外部网络，可以预先在外网环境下载所有依赖：
+
+```bash
+# 在外网环境：下载所有依赖
+npm install
+
+# 打包 node_modules 和 package-lock.json
+tar -czf dependencies.tar.gz node_modules package-lock.json
+
+# 在内网环境：解压并安装
+tar -xzf dependencies.tar.gz
+npm install --offline
+```
+
+**注意事项**：
+- 确保内网镜像源已同步所有需要的包（特别是 `@google/genai@1.16.0`）
+- 如果使用 Docker 开发环境，配置的 `.npmrc` 会通过 volume 映射到容器内
+- 详细配置说明请参考 `docs/dev-docker.md` 中的"内网运行配置"章节
 
 ---
 

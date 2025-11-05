@@ -1,0 +1,23 @@
+# 内网 npm 配置示例文件
+# 使用方法：复制此文件为 .npmrc.internal，然后根据需要修改配置
+
+# 方案 1：使用内网 npm 镜像源（如 cnpm、verdaccio 等）
+# 将所有包都从内网镜像源获取
+# registry=https://your-internal-npm-registry.com/
+
+# 方案 2：仅 @google/* 包使用内网源，其他包使用公共 registry
+# @google:registry=https://your-internal-npm-registry.com/
+# registry=https://registry.npmjs.org/
+
+# 方案 3：使用 Google 内部 wombat 服务（需要认证）
+# @google:registry=https://wombat-dressing-room.appspot.com
+# 使用前需要运行: npm run auth
+
+# 方案 4：混合配置 - @google/genai 使用公共 registry，其他 @google/* 包使用内网源
+# @google/genai:registry=https://registry.npmjs.org/
+# @google:registry=https://your-internal-npm-registry.com/
+
+# 注意事项：
+# 1. 确保内网镜像源已同步所有需要的包
+# 2. 如果使用 wombat，需要先运行 npm run auth 进行认证
+# 3. 配置优先级：包级别 > 作用域级别 > 全局 registry
