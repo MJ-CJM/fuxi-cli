@@ -11,9 +11,11 @@ import {
   Kind,
   type ToolResult,
 } from './tools.js';
-import type { Specification, Constitution } from '../spec/types.js';
+import type { Specification } from '../spec/types.js';
 import { SpecCategory, SpecStatus } from '../spec/types.js';
 import type { Config } from '../config/config.js';
+import { SpecManager } from '../spec/SpecManager.js';
+import { formatConstitutionForAI } from '../spec/ConstitutionFormatter.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -35,35 +37,6 @@ export interface SpecificationParams {
   targetRelease?: string;
 }
 
-/**
- * Load constitution from file system
- */
-function loadConstitution(config: Config): Constitution | null {
-  const constitutionPath = path.join(
-    config.getWorkingDir(),
-    '.gemini',
-    'specs',
-    'constitution.json'
-  );
-
-  if (!fs.existsSync(constitutionPath)) {
-    return null;
-  }
-
-  try {
-    const content = fs.readFileSync(constitutionPath, 'utf-8');
-    const data = JSON.parse(content);
-    // Convert date strings back to Date objects
-    return {
-      ...data,
-      createdAt: new Date(data.createdAt),
-      updatedAt: new Date(data.updatedAt),
-    } as Constitution;
-  } catch (error) {
-    console.error('Failed to load constitution:', error);
-    return null;
-  }
-}
 
 class CreateSpecToolInvocation extends BaseToolInvocation<
   SpecificationParams,
@@ -85,7 +58,8 @@ class CreateSpecToolInvocation extends BaseToolInvocation<
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     // Load constitution for context
-    const constitution = loadConstitution(this.config);
+    const specManager = new SpecManager(this.config);
+    const constitution = specManager.loadConstitution();
 
     // Map string category to enum
     const categoryMap: Record<string, SpecCategory> = {
@@ -233,8 +207,15 @@ class CreateSpecToolInvocation extends BaseToolInvocation<
     output += `- View specification: \`/speckit.specify show ${spec.id}\`\n`;
     output += `- List all specifications: \`/speckit.specify list\`\n`;
 
+    // Build llmContent with Constitution context if available
+    let llmContent = '';
+    if (constitution) {
+      llmContent += formatConstitutionForAI(constitution) + '\n\n';
+    }
+    llmContent += `Successfully created specification "${spec.title}" (${spec.id}) with ${spec.userStories.length} user stories`;
+
     return {
-      llmContent: `Successfully created specification "${spec.title}" (${spec.id}) with ${spec.userStories.length} user stories`,
+      llmContent,
       returnDisplay: output,
     };
   }
