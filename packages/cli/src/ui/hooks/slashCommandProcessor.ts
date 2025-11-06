@@ -79,6 +79,7 @@ export const useSlashCommandProcessor = (
     currentPlan: any;
     setCurrentPlan: (plan: any) => void;
     planModeActive: boolean;
+    setPlanModeActive: (active: boolean) => void;
     executionQueue: {
       active: boolean;
       mode: 'default' | 'auto_edit';
