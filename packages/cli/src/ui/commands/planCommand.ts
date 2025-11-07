@@ -11,9 +11,47 @@ import { planToTodos } from '../../utils/todoUtils.js';
 
 export const planCommand: SlashCommand = {
   name: 'plan',
-  description: 'Plan mode management - show, convert to todos',
+  description: 'Plan mode management - create, show, convert to todos',
   kind: CommandKind.BUILT_IN,
   subCommands: [
+    {
+      name: 'create',
+      description: 'Create a new plan (activates Plan mode and prompts AI)',
+      kind: CommandKind.BUILT_IN,
+      action: async (context: CommandContext, args: string) => {
+        // Activate Plan mode if not already active
+        const setPlanModeActive = (context.session as any).setPlanModeActive;
+        const wasActive = (context.session as any).planModeActive;
+        
+        if (setPlanModeActive && !wasActive) {
+          setPlanModeActive(true);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: '📋 **Plan Mode Activated**\n\n✅ Read-only mode enabled\n✅ AI will use create_plan tool for structured output',
+            },
+            Date.now(),
+          );
+        }
+
+        // Construct the prompt for AI to create a plan
+        const userPrompt = args.trim();
+        let prompt: string;
+        
+        if (userPrompt) {
+          // User provided a description, use it directly
+          prompt = `Create a comprehensive plan for: ${userPrompt}`;
+        } else {
+          // No description provided, use a generic prompt
+          prompt = 'Create a detailed plan for the current task or project';
+        }
+
+        return {
+          type: 'submit_prompt' as const,
+          content: prompt,
+        };
+      },
+    },
     {
       name: 'to-todos',
       description: 'Convert current plan to todo list (in memory)',
@@ -25,7 +63,7 @@ export const planCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: 'No active plan found.\n\nCreate a plan first:\n1. Enter Plan mode: Ctrl+P\n2. Ask AI to create a plan\n3. AI will call create_plan tool',
+              text: 'No active plan found.\n\nCreate a plan first:\n1. Use /plan create [description] - Activates Plan mode and prompts AI to create a plan\n2. Or enter Plan mode: Ctrl+P, then ask AI to create a plan',
             },
             Date.now(),
           );
@@ -67,7 +105,7 @@ export const planCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: 'No active plan.\n\n💡 Enter Plan mode (Ctrl+P) and ask AI to create a plan.',
+              text: 'No active plan.\n\n💡 Create a plan:\n- /plan create [description] - Activates Plan mode and prompts AI\n- Or Ctrl+P to enter Plan mode, then ask AI to create a plan',
             },
             Date.now(),
           );

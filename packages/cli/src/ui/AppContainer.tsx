@@ -537,6 +537,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       currentPlan,
       setCurrentPlan,
       planModeActive,
+      setPlanModeActive,
       executionQueue,
       setExecutionQueue,
     },
@@ -980,6 +981,20 @@ Logging in with Google... Please restart Gemini CLI to continue.
         // Toggle Plan mode
         const newMode = !planModeActive;
         setPlanModeActive(newMode);
+
+        // Protection: when entering Plan mode, force DEFAULT approval and clear execution queue
+        if (newMode) {
+          try {
+            // Lazy import to avoid top-level dependency issues
+            (async () => {
+              const { ApprovalMode } = await import('@google/gemini-cli-core');
+              config.setApprovalMode(ApprovalMode.DEFAULT);
+            })();
+          } catch {}
+          if (executionQueue) {
+            setExecutionQueue(null);
+          }
+        }
 
         historyManager.addItem(
           {

@@ -373,7 +373,9 @@ ${'─'.repeat(70)}
 📊 **Content Summary:**
   - Role: ${generated.role.substring(0, 60)}${generated.role.length > 60 ? '...' : ''}
   - Responsibilities: ${generated.responsibilities.length} items
+  - Workflow: ${generated.workflow.length} steps
   - Guidelines: ${generated.guidelines.length} items
+  - Examples: ${generated.examples.length} scenarios
   - Constraints: ${generated.constraints.length} items
 `,
                         },
@@ -856,7 +858,9 @@ ${'─'.repeat(70)}
 📊 **Content Summary:**
   - Role: ${generated.role.substring(0, 60)}${generated.role.length > 60 ? '...' : ''}
   - Responsibilities: ${generated.responsibilities.length} items
+  - Workflow: ${generated.workflow.length} steps
   - Guidelines: ${generated.guidelines.length} items
+  - Examples: ${generated.examples.length} scenarios
   - Constraints: ${generated.constraints.length} items`,
                 },
                 Date.now()

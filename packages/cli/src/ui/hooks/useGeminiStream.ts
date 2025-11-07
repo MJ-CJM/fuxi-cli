@@ -1242,6 +1242,10 @@ export const useGeminiStream = (
           setIsResponding(false);
           
           // Check if we should continue batch execution using refs to get latest values
+          // Protection: Do not continue batch execution while in Plan mode
+          if (planModeActive) {
+            return;
+          }
           const currentQueue = executionQueueRef.current;
           const currentSetExecutionQueue = setExecutionQueueRef.current;
           
