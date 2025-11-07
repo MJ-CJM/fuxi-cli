@@ -12,7 +12,9 @@ export interface GeneratedAgentContent {
   systemPrompt: string;
   role: string;
   responsibilities: string[];
+  workflow: string[];
   guidelines: string[];
+  examples: string[];
   constraints: string[];
 }
 
@@ -67,34 +69,63 @@ export class AgentContentGenerator {
 Please generate a complete agent specification in the following format:
 
 # Role
-[A clear, concise description of the agent's role in 2-3 sentences]
+[A clear description of the agent's role in 2-3 sentences.
+Include what the agent does and its primary focus areas.]
 
 ## Responsibilities
-[List 3-5 specific responsibilities, each as a bullet point]
+[List 4-5 specific, actionable responsibilities. Each should be concrete.
+Format: "- **Category**: Brief action description (1 sentence)"]
+
+## Workflow
+[Describe 3-4 key steps this agent follows when working on a task.
+Use numbered list format: "1. Brief step description"]
 
 ## Guidelines
-[List 3-5 guidelines for how the agent should operate, each as a bullet point]
+[List 3-4 operational guidelines explaining HOW the agent should work.
+Keep each guideline to 1 sentence.]
+
+## Examples
+[Provide 2 concrete examples showing: Input → Action → Output.
+Keep each example brief (1-2 lines). Use bullet points starting with "- "]
 
 ## Constraints
-[List 2-4 constraints or limitations, each as a bullet point]
+[List 2-3 clear limitations. What the agent should NOT do.
+Keep each constraint to 1 sentence.]
 
-**Important:**
-- Be specific and actionable
-- Use imperative language ("Analyze errors", "Provide suggestions")
-- Keep each point concise (1-2 sentences max)
-- Focus on the agent's unique purpose: ${purpose}
+**Critical Requirements:**
+1. **Length Control**: Target total length ~500 words
+   - Role: 2-3 sentences (~60 words)
+   - Responsibilities: 4-5 items (~15 words each = 75 words)
+   - Workflow: 3-4 steps (~20 words each = 80 words)
+   - Guidelines: 3-4 items (~20 words each = 80 words)
+   - Examples: 2 scenarios (~40 words each = 80 words)
+   - Constraints: 2-3 items (~20 words each = 60 words)
 
-Generate the content now:`;
+2. **Conciseness**: Be specific but concise
+   - ✅ "Analyze Python traceback to identify exception type"
+   - ❌ Long explanations with excessive detail
+
+3. **Structure**: Use the EXACT format shown above
+   - Use "## " for section headers
+   - Use "- " for list items in Responsibilities, Guidelines, Examples, Constraints
+   - Use numbered lists (1. 2. 3...) ONLY for Workflow
+   - Use bold (**text**) for category labels in responsibilities
+
+4. **Focus**: Base all content on: ${purpose}
+
+Generate concise, high-quality content now:`;
   }
 
   private parseGeneratedContent(text: string): GeneratedAgentContent {
     const lines = text.split('\n');
     let role = '';
     const responsibilities: string[] = [];
+    const workflow: string[] = [];
     const guidelines: string[] = [];
+    const examples: string[] = [];
     const constraints: string[] = [];
 
-    let currentSection: 'role' | 'responsibilities' | 'guidelines' | 'constraints' | null = null;
+    let currentSection: 'role' | 'responsibilities' | 'workflow' | 'guidelines' | 'examples' | 'constraints' | null = null;
     let roleLines: string[] = [];
 
     for (const line of lines) {
@@ -106,8 +137,14 @@ Generate the content now:`;
       } else if (trimmed.startsWith('## Responsibilities')) {
         currentSection = 'responsibilities';
         continue;
+      } else if (trimmed.startsWith('## Workflow')) {
+        currentSection = 'workflow';
+        continue;
       } else if (trimmed.startsWith('## Guidelines')) {
         currentSection = 'guidelines';
+        continue;
+      } else if (trimmed.startsWith('## Examples')) {
+        currentSection = 'examples';
         continue;
       } else if (trimmed.startsWith('## Constraints')) {
         currentSection = 'constraints';
@@ -120,8 +157,13 @@ Generate the content now:`;
         roleLines.push(trimmed);
       } else if (currentSection === 'responsibilities' && trimmed.startsWith('-')) {
         responsibilities.push(trimmed.substring(1).trim());
+      } else if (currentSection === 'workflow' && /^\d+\./.test(trimmed)) {
+        // Parse numbered list items for workflow (e.g., "1. Step description")
+        workflow.push(trimmed.replace(/^\d+\.\s*/, '').trim());
       } else if (currentSection === 'guidelines' && trimmed.startsWith('-')) {
         guidelines.push(trimmed.substring(1).trim());
+      } else if (currentSection === 'examples' && trimmed.startsWith('-')) {
+        examples.push(trimmed.substring(1).trim());
       } else if (currentSection === 'constraints' && trimmed.startsWith('-')) {
         constraints.push(trimmed.substring(1).trim());
       }
@@ -133,7 +175,9 @@ Generate the content now:`;
     const systemPrompt = this.buildSystemPrompt(
       role,
       responsibilities,
+      workflow,
       guidelines,
+      examples,
       constraints,
     );
 
@@ -141,7 +185,9 @@ Generate the content now:`;
       systemPrompt,
       role,
       responsibilities,
+      workflow,
       guidelines,
+      examples,
       constraints,
     };
   }
@@ -149,7 +195,9 @@ Generate the content now:`;
   private buildSystemPrompt(
     role: string,
     responsibilities: string[],
+    workflow: string[],
     guidelines: string[],
+    examples: string[],
     constraints: string[],
   ): string {
     let prompt = `# Role\n\n${role}\n\n`;
@@ -162,10 +210,26 @@ Generate the content now:`;
       prompt += '\n';
     }
 
+    if (workflow.length > 0) {
+      prompt += `## Workflow\n\n`;
+      workflow.forEach((step, index) => {
+        prompt += `${index + 1}. ${step}\n`;
+      });
+      prompt += '\n';
+    }
+
     if (guidelines.length > 0) {
       prompt += `## Guidelines\n\n`;
       for (const guide of guidelines) {
         prompt += `- ${guide}\n`;
+      }
+      prompt += '\n';
+    }
+
+    if (examples.length > 0) {
+      prompt += `## Examples\n\n`;
+      for (const example of examples) {
+        prompt += `- ${example}\n`;
       }
       prompt += '\n';
     }
