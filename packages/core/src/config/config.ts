@@ -683,7 +683,6 @@ export class Config {
 
           this.customModels[modelName] = modelConfig;
         }
-        console.log(`Loaded ${Object.keys(config.models).length} custom model configurations`);
       }
 
       // Set default model if specified and exists in custom models
@@ -694,7 +693,6 @@ export class Config {
           model: defaultModelConfig.model
         };
         this.model = config.defaultModel;
-        console.log(`Set default model to: ${config.defaultModel}`);
       }
     } catch (error) {
       console.log('Could not load custom model configurations:', error instanceof Error ? error.message : 'Unknown error');
