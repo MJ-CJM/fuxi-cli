@@ -450,20 +450,35 @@ export class CustomAdapter extends AbstractModelClient {
    * Convert UnifiedRequest based on response format
    */
   private convertRequest(request: UnifiedRequest): any {
+    let customRequest: any;
+
     switch (this.responseFormat) {
       case CustomResponseFormat.OPENAI:
         const supportsMultimodal = this.config.capabilities?.supportsMultimodal ?? true;
         const openaiRequest = APITranslator.unifiedToOpenaiRequest(request, supportsMultimodal);
         openaiRequest.model = this.config.model;
-        return openaiRequest;
+        customRequest = openaiRequest;
+        break;
 
       case CustomResponseFormat.CLAUDE:
-        return this.convertToClaudeRequest(request);
+        customRequest = this.convertToClaudeRequest(request);
+        break;
 
       case CustomResponseFormat.RAW:
       default:
-        return this.convertToRawRequest(request);
+        customRequest = this.convertToRawRequest(request);
+        break;
     }
+
+    const extraParams = this.config.options?.['requestBody'];
+    if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+      customRequest = {
+        ...extraParams,
+        ...customRequest,
+      };
+    }
+
+    return customRequest;
   }
 
   /**
