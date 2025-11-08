@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type {
   ModelConfig,
   UnifiedRequest,
@@ -182,6 +184,32 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
 
+      const extraParams = this.config.options?.['requestBody'];
+      if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+        Object.assign(openaiRequest, extraParams);
+      }
+
+      const debugRequests =
+        Boolean(process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG']);
+
+      if (debugRequests) {
+        try {
+          console.log('[OpenAIAdapter] Sending request', {
+            provider: this.config.provider,
+            model: this.config.model,
+            endpoint: '/chat/completions',
+            body: openaiRequest,
+          });
+        } catch (error) {
+          console.warn(
+            '[OpenAIAdapter] Failed to log request payload for debugging:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
       // Debug: Log the system message being sent
       if (process.env['DEBUG_MODEL_REQUESTS']) {
         const systemMsg = openaiRequest.messages?.find((m: any) => m.role === 'system');
@@ -226,6 +254,32 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
       openaiRequest.stream = true;
+
+      const extraParams = this.config.options?.['requestBody'];
+      if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+        Object.assign(openaiRequest, extraParams);
+      }
+
+      const debugRequests =
+        Boolean(process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG']);
+
+      if (debugRequests) {
+        try {
+          console.log('[OpenAIAdapter] Sending stream request', {
+            provider: this.config.provider,
+            model: this.config.model,
+            endpoint: '/chat/completions',
+            body: openaiRequest,
+          });
+        } catch (error) {
+          console.warn(
+            '[OpenAIAdapter] Failed to log streaming payload for debugging:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
 
       const response = await this.makeRequest('/chat/completions', openaiRequest, { stream: true });
 
@@ -275,7 +329,7 @@ export class OpenAIAdapter extends AbstractModelClient {
                   delta: unifiedResponse,
                   done: false
                 };
-              } catch (parseError) {
+              } catch (_parseError) {
                 // Skip malformed chunks
                 continue;
               }
@@ -368,7 +422,7 @@ export class OpenAIAdapter extends AbstractModelClient {
         model.includes('o1') ||
         model.includes('claude') // In case using OpenAI-compatible endpoint
       );
-    } catch (error) {
+    } catch (_error) {
       // Return common models if API call fails
       return [
         'gpt-4o',

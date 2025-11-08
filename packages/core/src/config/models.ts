@@ -171,44 +171,8 @@ export function getEffectiveModel(
  * Get fallback configurations for a given model
  */
 export function getFallbackConfigs(modelConfig: ModelConfig): ModelConfig[] {
-  const fallbacks: ModelConfig[] = [];
-
-  // Provider-specific fallbacks
-  switch (modelConfig.provider) {
-    case 'gemini':
-      if (modelConfig.model !== DEFAULT_GEMINI_FLASH_MODEL) {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS[DEFAULT_GEMINI_FLASH_MODEL]);
-      }
-      break;
-
-    case 'openai':
-      if (modelConfig.model !== 'gpt-4o-mini') {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS['gpt-4o-mini']);
-      }
-      break;
-
-    case 'claude':
-      if (modelConfig.model !== 'claude-3-5-haiku-20241022') {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS['claude-3-5-haiku']);
-      }
-      break;
-
-    case 'qwen':
-    case 'deepseek':
-      // For Qwen/DeepSeek, no specific fallback within the same provider
-      // They will fall back to cross-provider options below
-      break;
-  }
-
-  // Cross-provider fallback: try another ModelRouter-compatible model
-  // Note: We don't add Gemini as a fallback because it doesn't have a ModelRouter adapter
-  // Gemini uses the traditional implementation path (geminiChat.ts), not ModelRouter
-  if (modelConfig.provider !== 'openai') {
-    // Fallback to OpenAI gpt-4o-mini if available
-    fallbacks.push(DEFAULT_MODEL_CONFIGS['gpt-4o-mini']);
-  }
-
-  return fallbacks;
+  // Disable automatic fallbacks—if the primary model fails, surface the error directly.
+  return [];
 }
 
 /**

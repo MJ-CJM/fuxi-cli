@@ -100,6 +100,22 @@ export class CustomAdapter extends AbstractModelClient {
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
     const headers = this.getHeaders();
 
+    if (process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) {
+      try {
+        console.log('[CustomAdapter] Sending request', {
+          url,
+          body,
+          provider: this.config.provider,
+          model: this.config.model,
+        });
+      } catch (error) {
+        console.warn(
+          '[CustomAdapter] Failed to log request payload for debugging:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers,
