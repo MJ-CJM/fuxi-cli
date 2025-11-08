@@ -356,16 +356,23 @@ export class OpenAIAdapter extends AbstractModelClient {
    * Count tokens for the request (approximate, as OpenAI doesn't provide exact token counting)
    */
   async countTokens(request: UnifiedRequest): Promise<TokenCountResponse> {
-    // OpenAI doesn't provide a direct token counting API
-    // We'll use a rough estimation based on text length
+    // Universal token estimation algorithm
+    // Supports mixed Chinese and English content
     const textContent = request.messages
       .flatMap(msg => msg.content)
       .filter(part => part.type === 'text')
       .map(part => part.text || '')
       .join(' ');
 
-    // Rough estimation: ~4 characters per token
-    const estimatedTokens = Math.ceil(textContent.length / 4);
+    // Improved estimation:
+    // - Chinese characters: ~1.5 chars per token (CJK tokenizers are more efficient)
+    // - English/other: ~4 chars per token (standard GPT tokenizer ratio)
+    const chineseRegex = /[\u4e00-\u9fa5]/g;
+    const chineseMatches = textContent.match(chineseRegex);
+    const chineseChars = chineseMatches ? chineseMatches.length : 0;
+    const otherChars = textContent.length - chineseChars;
+
+    const estimatedTokens = Math.ceil(chineseChars / 1.5 + otherChars / 4);
 
     return {
       tokenCount: estimatedTokens
