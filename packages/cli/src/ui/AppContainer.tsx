@@ -138,6 +138,9 @@ export const AppContainer = (props: AppContainerProps) => {
   const [themeError, setThemeError] = useState<string | null>(
     initializationResult.themeError,
   );
+  const [configFilesMissingError] = useState<string | null>(
+    initializationResult.configFilesMissingError,
+  );
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
@@ -1164,6 +1167,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       isAuthenticating,
       isConfigInitialized,
       authError,
+      configFilesMissingError,
       isAuthDialogOpen,
       editorError,
       isEditorDialogOpen,
@@ -1245,6 +1249,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       isAuthenticating,
       isConfigInitialized,
       authError,
+      configFilesMissingError,
       isAuthDialogOpen,
       editorError,
       isEditorDialogOpen,

@@ -1219,6 +1219,17 @@ export class GeminiClient {
       this.getChat().addHistory(modelResponse);
 
       const finishReason = this.mapFinishReason(response.finishReason);
+
+      // Debug: Log usage info to help diagnose token count issues
+      if (process.env['DEBUG_TOKEN_COUNT']) {
+        logger.info('Response usage metadata', {
+          hasUsage: !!response.usage,
+          usage: response.usage,
+          promptTokens: response.usage?.promptTokens,
+          totalTokens: response.usage?.totalTokens
+        });
+      }
+
       yield {
         type: GeminiEventType.Finished,
         value: {

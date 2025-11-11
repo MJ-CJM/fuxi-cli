@@ -184,6 +184,12 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
 
+      // IMPORTANT: Request usage information in the response
+      // Some OpenAI-compatible APIs (like Qwen) don't return usage by default
+      if (!openaiRequest.stream_options) {
+        openaiRequest.stream_options = { include_usage: true };
+      }
+
       const extraParams = this.config.options?.['requestBody'];
       if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
         Object.assign(openaiRequest, extraParams);
@@ -221,6 +227,15 @@ export class OpenAIAdapter extends AbstractModelClient {
 
       const response = await this.makeRequest('/chat/completions', openaiRequest);
 
+      // Debug: Log response usage to help diagnose token count issues
+      if (process.env['DEBUG_TOKEN_COUNT']) {
+        console.log('[OpenAIAdapter] Response usage:', {
+          hasUsage: !!response.usage,
+          usage: response.usage,
+          model: response.model
+        });
+      }
+
       return APITranslator.openaiResponseToUnified(response);
     } catch (error) {
       if (error instanceof Error && 'statusCode' in error) {
@@ -254,6 +269,12 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
       openaiRequest.stream = true;
+
+      // IMPORTANT: Request usage information in streaming responses
+      // Some OpenAI-compatible APIs (like Qwen) require this to get token counts
+      if (!openaiRequest.stream_options) {
+        openaiRequest.stream_options = { include_usage: true };
+      }
 
       const extraParams = this.config.options?.['requestBody'];
       if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {

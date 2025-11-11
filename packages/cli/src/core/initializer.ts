@@ -14,10 +14,12 @@ import {
 import { type LoadedSettings } from '../config/settings.js';
 import { performInitialAuth } from './auth.js';
 import { validateTheme } from './theme.js';
+import { checkRequiredConfigFiles } from '../utils/configFileChecker.js';
 
 export interface InitializationResult {
   authError: string | null;
   themeError: string | null;
+  configFilesMissingError: string | null;
   shouldOpenAuthDialog: boolean;
   geminiMdFileCount: number;
 }
@@ -33,14 +35,32 @@ export async function initializeApp(
   config: Config,
   settings: LoadedSettings,
 ): Promise<InitializationResult> {
+  // Check if required configuration files exist
+  const configFilesCheck = checkRequiredConfigFiles();
+  const configFilesMissingError = configFilesCheck.errorMessage;
+
+  // If config files are missing, skip auth and return early
+  if (!configFilesCheck.allExist) {
+    return {
+      authError: null,
+      themeError: null,
+      configFilesMissingError,
+      shouldOpenAuthDialog: false,
+      geminiMdFileCount: config.getGeminiMdFileCount(),
+    };
+  }
+
+  // Proceed with normal initialization
   const authError = await performInitialAuth(
     config,
     settings.merged.security?.auth?.selectedType,
   );
   const themeError = validateTheme(settings);
 
+  // Only open auth dialog if config files exist and auth is needed
   const shouldOpenAuthDialog =
-    settings.merged.security?.auth?.selectedType === undefined || !!authError;
+    !configFilesMissingError &&
+    (settings.merged.security?.auth?.selectedType === undefined || !!authError);
 
   if (config.getIdeMode()) {
     const ideClient = await IdeClient.getInstance();
@@ -51,6 +71,7 @@ export async function initializeApp(
   return {
     authError,
     themeError,
+    configFilesMissingError,
     shouldOpenAuthDialog,
     geminiMdFileCount: config.getGeminiMdFileCount(),
   };

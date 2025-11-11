@@ -46,6 +46,7 @@ export interface UIState {
   isAuthenticating: boolean;
   isConfigInitialized: boolean;
   authError: string | null;
+  configFilesMissingError: string | null;
   isAuthDialogOpen: boolean;
   editorError: string | null;
   isEditorDialogOpen: boolean;
