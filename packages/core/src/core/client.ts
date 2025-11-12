@@ -62,6 +62,7 @@ import {
   MalformedJsonResponseEvent,
   NextSpeakerCheckEvent,
 } from '../telemetry/types.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 import type { IdeContext, File } from '../ide/types.js';
 import { handleFallback } from '../fallback/handler.js';
 import type { RoutingContext } from '../routing/routingStrategy.js';
@@ -1230,17 +1231,25 @@ export class GeminiClient {
         });
       }
 
+      // Extract usageMetadata for the Finished event
+      const usageMetadata = response.usage
+        ? {
+            promptTokenCount: response.usage.promptTokens,
+            totalTokenCount: response.usage.totalTokens,
+            candidatesTokenCount: response.usage.completionTokens,
+          }
+        : undefined;
+
+      // Update UI telemetry service with token count for context display
+      if (usageMetadata?.promptTokenCount !== undefined) {
+        uiTelemetryService.setLastPromptTokenCount(usageMetadata.promptTokenCount);
+      }
+
       yield {
         type: GeminiEventType.Finished,
         value: {
           reason: finishReason,
-          usageMetadata: response.usage
-            ? {
-                promptTokenCount: response.usage.promptTokens,
-                totalTokenCount: response.usage.totalTokens,
-                candidatesTokenCount: response.usage.completionTokens,
-              }
-            : undefined,
+          usageMetadata,
         },
       };
 

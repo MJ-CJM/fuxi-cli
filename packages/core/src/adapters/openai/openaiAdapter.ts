@@ -184,11 +184,9 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
 
-      // IMPORTANT: Request usage information in the response
-      // Some OpenAI-compatible APIs (like Qwen) don't return usage by default
-      if (!openaiRequest.stream_options) {
-        openaiRequest.stream_options = { include_usage: true };
-      }
+      // stream_options only works with stream: true
+      // For non-streaming requests, token usage is available in response.usage
+      // No need to set stream_options here
 
       const extraParams = this.config.options?.['requestBody'];
       if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
