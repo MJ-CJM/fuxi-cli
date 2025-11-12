@@ -40,9 +40,6 @@ import { handleFallback } from '../fallback/handler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { partListUnionToString } from './geminiRequest.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
-import { ModelService } from '../services/modelService.js';
-import type { UnifiedRequest } from '../adapters/base/types.js';
-import { APITranslator } from '../adapters/utils/apiTranslator.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -489,7 +486,6 @@ export class GeminiChat {
 
     let hasToolCall = false;
     let hasFinishReason = false;
-    let hasReceivedTokenCount = false;
 
     for await (const chunk of this.stopBeforeSecondMutator(streamResponse)) {
       hasFinishReason =
@@ -518,7 +514,6 @@ export class GeminiChat {
           uiTelemetryService.setLastPromptTokenCount(
             chunk.usageMetadata.promptTokenCount,
           );
-          hasReceivedTokenCount = true;
         }
       }
 
@@ -577,60 +572,6 @@ export class GeminiChat {
     }
 
     this.history.push({ role: 'model', parts: consolidatedParts });
-
-    // Calculate and update token count if API didn't provide it
-    // This ensures context left displays correctly for custom models
-    if (!hasReceivedTokenCount) {
-      const calculatedTokenCount = await this.calculatePromptTokenCount(model);
-      if (calculatedTokenCount > 0) {
-        uiTelemetryService.setLastPromptTokenCount(calculatedTokenCount);
-      }
-    }
-  }
-
-  /**
-   * Calculates the prompt token count for the current conversation history.
-   * This method is used when the API response doesn't include usageMetadata.
-   * It uses the same logic as /compress command for consistent token counting.
-   */
-  private async calculatePromptTokenCount(model: string): Promise<number> {
-    try {
-      const curatedHistory = extractCuratedHistory(this.history);
-
-      if (this.config.getUseModelRouter()) {
-        // Model router enabled: use ModelService for token counting
-        const modelService = new ModelService(this.config);
-        const historyMessages = curatedHistory.map((content: Content) =>
-          APITranslator.geminiContentToUnified(content),
-        );
-
-        const unifiedRequest: UnifiedRequest = {
-          messages: historyMessages,
-          model,
-        };
-
-        const tokenResponse = await modelService.countTokens(
-          unifiedRequest,
-          model,
-        );
-        return tokenResponse.tokenCount || 0;
-      } else {
-        // Traditional Gemini API: use contentGenerator
-        const tokenResponse = await this.config
-          .getContentGenerator()
-          .countTokens({
-            model,
-            contents: curatedHistory,
-          });
-        return tokenResponse.totalTokens || 0;
-      }
-    } catch (error) {
-      console.warn(
-        `Failed to calculate token count for model ${model}:`,
-        error,
-      );
-      return 0;
-    }
   }
 
   /**

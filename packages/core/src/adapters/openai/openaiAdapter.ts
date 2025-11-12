@@ -184,9 +184,8 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
 
-      // stream_options only works with stream: true
-      // For non-streaming requests, token usage is available in response.usage
-      // No need to set stream_options here
+      // Note: stream_options can only be used with stream: true
+      // In non-streaming mode, usage is included by default in the response
 
       const extraParams = this.config.options?.['requestBody'];
       if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
