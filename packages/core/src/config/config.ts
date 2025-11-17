@@ -1195,27 +1195,47 @@ export class Config {
       });
     }
 
-    // First, check if there's a full custom model configuration
+    // Priority 1: Check if there's a full custom model configuration by exact key
     // This preserves capabilities, adapterType, and all other fields
     const customModelKey = model; // Try model name first
     if (this.customModels[customModelKey]) {
       if (process.env['DEBUG_MODEL_REQUESTS']) {
-        console.log('[DEBUG] Found custom model config:', customModelKey);
+        console.log('[DEBUG] Found custom model config by key:', customModelKey);
       }
       return this.customModels[customModelKey];
     }
 
-    // Also try provider:model format
+    // Priority 2: Try provider:model format
     const providerModelKey = `${provider}:${model}`;
     if (this.customModels[providerModelKey]) {
       if (process.env['DEBUG_MODEL_REQUESTS']) {
-        console.log('[DEBUG] Found custom model config:', providerModelKey);
+        console.log('[DEBUG] Found custom model config by provider:model key:', providerModelKey);
       }
       return this.customModels[providerModelKey];
     }
 
+    // Priority 3: IMPORTANT - Search by model field (handles key != model case)
+    // Example: config key "qwen-coder-plus2" with model field "qwen-coder-plus"
+    for (const [key, config] of Object.entries(this.customModels)) {
+      if (config.model === model && config.provider === provider) {
+        if (process.env['DEBUG_MODEL_REQUESTS']) {
+          console.log('[DEBUG] Found custom model config by model field:', { key, model, provider });
+        }
+        return config;
+      }
+    }
+
     // Fallback: construct basic config from modelProviders
+    // WARNING: This will NOT include capabilities, so maxTokens will use defaults
     const providerSettings = this.modelProviders?.[provider];
+
+    if (process.env['DEBUG_MODEL_REQUESTS']) {
+      console.warn('[DEBUG] No custom config found, using fallback (capabilities will be missing):', {
+        provider,
+        model,
+        hasProviderSettings: !!providerSettings
+      });
+    }
 
     return {
       provider: provider as import('../adapters/base/types.js').ModelProvider,
