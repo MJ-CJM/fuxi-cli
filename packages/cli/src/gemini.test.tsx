@@ -434,6 +434,7 @@ describe('startInteractiveUI', () => {
     const mockInitializationResult = {
       authError: null,
       themeError: null,
+      configFilesMissingError: null,
       shouldOpenAuthDialog: false,
       geminiMdFileCount: 0,
     };
@@ -468,6 +469,7 @@ describe('startInteractiveUI', () => {
     const mockInitializationResult = {
       authError: null,
       themeError: null,
+      configFilesMissingError: null,
       shouldOpenAuthDialog: false,
       geminiMdFileCount: 0,
     };

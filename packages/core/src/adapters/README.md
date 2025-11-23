@@ -1,6 +1,6 @@
-# Multi-Model Support for TIANGONG CLI
+# Multi-Model Support for FUXI CLI
 
-This directory contains the multi-model adapter system that enables TIANGONG CLI to work with different AI model providers beyond just Gemini.
+This directory contains the multi-model adapter system that enables FUXI CLI to work with different AI model providers beyond just Gemini.
 
 ## Architecture Overview
 
@@ -92,19 +92,19 @@ const claudeResponse = await modelService.generateContent(request, 'claude:claud
 
 ```bash
 # Default model (Gemini)
-tiangong "What is AI?"
+fuxi-cli "What is AI?"
 
 # Specify provider and model
-tiangong --model openai:gpt-4o "Explain machine learning"
-tiangong --model claude:claude-3-5-sonnet "Write a poem"
+fuxi-cli --model openai:gpt-4o "Explain machine learning"
+fuxi-cli --model claude:claude-3-5-sonnet "Write a poem"
 
 # Use custom local model
-tiangong --model custom:my-local-llama "Help me code"
+fuxi-cli --model custom:my-local-llama "Help me code"
 ```
 
 ### Configuration File
 
-Create `~/.tiangong/config.json`:
+Create `~/.gemini/config.json`:
 
 ```json
 {

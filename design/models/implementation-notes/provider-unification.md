@@ -271,11 +271,11 @@ private static inferAdapterType(provider: ModelProvider | string): string {
 
 ```bash
 # 测试 Qwen
-tiangong "你是谁?" --model qwen3-coder-flash
+fuxi-cli "你是谁?" --model qwen3-coder-flash
 # 应回答: "我是通义千问"
 
 # 测试 DeepSeek
-tiangong "你是谁?" --model deepseek-coder
+fuxi-cli "你是谁?" --model deepseek-coder
 # 应回答: "我是 DeepSeek"
 ```
 
@@ -288,7 +288,7 @@ export DEBUG_MODEL_REQUESTS=1
 # 查看消息格式转换
 export DEBUG_MESSAGE_FORMAT=1
 
-tiangong "hello"
+fuxi-cli "hello"
 ```
 
 ## 📊 实施结果

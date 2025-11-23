@@ -16,6 +16,7 @@ import {
 } from './tools.js';
 import type { SpecTask, TaskList } from '../spec/types.js';
 import { SpecManager } from '../spec/SpecManager.js';
+import { formatConstitutionForAI } from '../spec/ConstitutionFormatter.js';
 
 /**
  * Parameters for the spec_to_tasks tool
@@ -78,6 +79,9 @@ class SpecToTasksToolInvocation extends BaseToolInvocation<
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const specManager = new SpecManager(this.config);
+
+    // Load constitution for context
+    const constitution = specManager.loadConstitution();
 
     // Verify plan exists and get plan info
     const plan = specManager.getPlanById(this.params.planId);
@@ -244,8 +248,15 @@ class SpecToTasksToolInvocation extends BaseToolInvocation<
     output += `- Start implementation following the task order\n`;
     output += `- Update task status as you progress\n`;
 
+    // Build llmContent with Constitution context if available
+    let llmContent = '';
+    if (constitution) {
+      llmContent += formatConstitutionForAI(constitution) + '\n\n';
+    }
+    llmContent += `Successfully generated ${this.params.tasks.length} tasks (ID: '${tasksId}', variant: '${variant}') for plan '${this.params.planId}' (spec: '${specId}'). Tasks are organized by type (implementation, testing, documentation, review) and include dependencies and file references. Saved to ${tasksPath}`;
+
     return {
-      llmContent: `Successfully generated ${this.params.tasks.length} tasks (ID: '${tasksId}', variant: '${variant}') for plan '${this.params.planId}' (spec: '${specId}'). Tasks are organized by type (implementation, testing, documentation, review) and include dependencies and file references. Saved to ${tasksPath}`,
+      llmContent,
       returnDisplay: output,
     };
   }

@@ -36,6 +36,7 @@ describe('Routing and Handoff Integration', () => {
     kind: 'agent',
     name,
     title: `${name} Agent`,
+    description: `Test agent for ${name}`,
     systemPrompt: `You are ${name}`,
     filePath: `/test/${name}.md`,
     triggers: options?.triggers,

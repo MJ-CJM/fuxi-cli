@@ -111,8 +111,12 @@ export class AgentExecutor {
       agent.contextMode ||           // Agent definition
       'isolated';                    // Default
 
-    // Get or create context with specified mode
-    const context = this.contextManager.getContext(agentName, contextMode);
+    // For hybrid mode, execute internally with isolated mode
+    // (Agent will use isolated context during execution)
+    const internalMode = contextMode === 'hybrid' ? 'isolated' : contextMode;
+
+    // Get or create context with internal mode
+    const context = this.contextManager.getContext(agentName, internalMode);
 
     // Add user message to history
     const userMessage: UnifiedMessage = {
@@ -125,7 +129,10 @@ export class AgentExecutor {
       ],
     };
 
-    this.contextManager.addMessage(agentName, userMessage, contextMode);
+    this.contextManager.addMessage(agentName, userMessage, internalMode);
+
+    // Track tool calls for hybrid mode
+    const toolCallsTracking: Array<{ name: string; success: boolean; error?: string }> = [];
 
     // Get filtered tools for agent
     const toolDefinitions = this.getToolDefinitions(runtime.availableTools);
@@ -136,7 +143,7 @@ export class AgentExecutor {
 
     // Execute with tool calling loop
     let totalTokensUsed = 0;
-    const maxIterations = 10; // Prevent infinite loops
+    const maxIterations = 30; // Increased from 10 to allow more complex tasks
     let iteration = 0;
     let finalText = '';
 
@@ -147,11 +154,36 @@ export class AgentExecutor {
       const model = agent.model || this.config.getModel() || 'gemini-2.0-flash';
 
       // Build system message with context mode instructions
-      const systemMessage = this.buildSystemMessage(agent, contextMode, context);
+      const systemMessage = this.buildSystemMessage(agent, internalMode, context);
+
+      // Sanitize conversation history for custom models (especially in shared mode)
+      const sanitizedMessages = this.sanitizeMessagesForAgent(
+        context.conversationHistory,
+        internalMode,
+        agent.model
+      );
+
+      // Debug: Log sanitized messages for troubleshooting (when DEBUG env var is set)
+      if (process.env['DEBUG_AGENT_MESSAGES'] || process.env['DEBUG']) {
+        console.log(`[AgentExecutor] Sanitized messages for ${agentName}:`, {
+          count: sanitizedMessages.length,
+          contextMode: internalMode,
+          messages: sanitizedMessages.map((m, i) => ({
+            index: i,
+            role: m.role,
+            contentParts: m.content.length,
+            contentTypes: m.content.map(p => p.type),
+            preview: m.content
+              .filter(p => p.type === 'text')
+              .map(p => p.text?.substring(0, 80))
+              .join(' | ')
+          }))
+        });
+      }
 
       const request: UnifiedRequest = {
         model,
-        messages: [...context.conversationHistory],
+        messages: sanitizedMessages,
         systemMessage,
         tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
         maxTokens: options.maxTokens,
@@ -177,7 +209,7 @@ export class AgentExecutor {
         role: MessageRole.ASSISTANT,
         content: response.content,
       };
-      this.contextManager.addMessage(agentName, assistantMessage, contextMode);
+      this.contextManager.addMessage(agentName, assistantMessage, internalMode);
 
       // If no function calls, we're done
       if (functionCalls.length === 0) {
@@ -208,7 +240,7 @@ export class AgentExecutor {
             }
 
             // Get conversation history for handoff context
-            const conversationHistory = this.contextManager.getContext(agentName, contextMode)
+            const conversationHistory = this.contextManager.getContext(agentName, internalMode)
               .conversationHistory;
 
             // Create handoff context
@@ -276,6 +308,11 @@ export class AgentExecutor {
         } else {
           // Regular tool call
           try {
+            // Track tool call for hybrid mode
+            if (contextMode === 'hybrid') {
+              toolCallsTracking.push({ name, success: false });
+            }
+
             // Notify tool call start
             if (options.onToolCall) {
               options.onToolCall(name, args);
@@ -292,6 +329,14 @@ export class AgentExecutor {
             // Execute tool invocation with AbortController
             const abortController = new AbortController();
             const result = await invocation.execute(abortController.signal);
+
+            // Mark tool call as successful for hybrid mode
+            if (contextMode === 'hybrid') {
+              const lastCall = toolCallsTracking[toolCallsTracking.length - 1];
+              if (lastCall && lastCall.name === name) {
+                lastCall.success = true;
+              }
+            }
 
             // Notify tool call result
             if (options.onToolResult) {
@@ -313,6 +358,15 @@ export class AgentExecutor {
               ],
             });
           } catch (error) {
+            // Track error for hybrid mode
+            if (contextMode === 'hybrid') {
+              const lastCall = toolCallsTracking[toolCallsTracking.length - 1];
+              if (lastCall && lastCall.name === name) {
+                lastCall.success = false;
+                lastCall.error = error instanceof Error ? error.message : String(error);
+              }
+            }
+
             // Notify tool call error
             if (options.onToolResult) {
               options.onToolResult(name, null, error as Error);
@@ -340,7 +394,7 @@ export class AgentExecutor {
 
       // Add function responses to context
       for (const funcResp of functionResponses) {
-        this.contextManager.addMessage(agentName, funcResp, contextMode);
+        this.contextManager.addMessage(agentName, funcResp, internalMode);
       }
 
       // Continue loop to get final response
@@ -374,15 +428,29 @@ export class AgentExecutor {
     const executeResponse: AgentExecuteResponse = {
       agentName,
       text: finalText,
-      context: this.contextManager.getContext(agentName, contextMode),
+      context: this.contextManager.getContext(agentName, internalMode),
       metadata: {
         model: agent.model || this.config.getModel() || 'gemini-2.0-flash',
         tokensUsed: totalTokensUsed,
         durationMs: Date.now() - startTime,
         iterations: iteration,
         contextMode,
+        toolCallsTracking: contextMode === 'hybrid' ? toolCallsTracking : undefined,
       },
     };
+
+    // For hybrid mode, write summary to main session
+    if (contextMode === 'hybrid') {
+      // console.error(`[HybridMode] Detected hybrid context mode for agent: ${agentName}`);
+      const summaryMessage = this.buildHybridSummary(
+        agentName,
+        prompt,
+        executeResponse,
+        options.hybridOptions
+      );
+
+      this.contextManager.addHybridSummary(agentName, summaryMessage);
+    }
 
     return executeResponse;
   }
@@ -487,6 +555,71 @@ export class AgentExecutor {
     prompt += 'Please continue from here.';
 
     return prompt;
+  }
+
+  /**
+   * Build hybrid mode summary message
+   *
+   * @param agentName - Agent name
+   * @param prompt - Original user prompt
+   * @param response - Agent execution response
+   * @param options - Hybrid mode options
+   * @returns Summary message to add to main session
+   */
+  private buildHybridSummary(
+    agentName: string,
+    prompt: string,
+    response: AgentExecuteResponse,
+    options?: import('./types.js').HybridContextOptions
+  ): UnifiedMessage {
+    const opts = {
+      includeSummary: true,
+      includeToolCalls: false,
+      includeErrors: true,
+      includeMetadata: true,
+      ...options
+    };
+
+    // Use custom summary if provided
+    if (opts.customSummary) {
+      const customText = opts.customSummary(response);
+      console.error(`[HybridMode] Building custom summary (agent: ${agentName}, length: ${customText.length} chars)`);
+      return {
+        role: MessageRole.ASSISTANT,
+        content: [{ type: 'text', text: customText }]
+      };
+    }
+
+    // Build default summary
+    let summaryText = `[Agent: ${agentName}]\n\n`;
+    summaryText += response.text;
+
+    // Add metadata section if requested
+    if (opts.includeMetadata || opts.includeToolCalls || opts.includeErrors) {
+      summaryText += '\n\n---\n\n';
+      summaryText += `*Execution Summary*\n`;
+      summaryText += `- Duration: ${response.metadata.durationMs}ms\n`;
+      summaryText += `- Iterations: ${response.metadata.iterations || 0}\n`;
+
+      if (opts.includeToolCalls && response.metadata.toolCallsTracking) {
+        const tools = response.metadata.toolCallsTracking;
+        summaryText += `- Tools called: ${tools.length}\n`;
+
+        if (opts.includeErrors) {
+          const errors = tools.filter(t => !t.success);
+          if (errors.length > 0) {
+            summaryText += `- Errors: ${errors.map(e => `${e.name}: ${e.error}`).join('; ')}\n`;
+          }
+        }
+      }
+    }
+
+    // console.error(`[HybridMode] Built summary (agent: ${agentName}, length: ${summaryText.length} chars, metadata: ${opts.includeMetadata})`);
+
+    return {
+      role: MessageRole.ASSISTANT,
+      content: [{ type: 'text', text: summaryText }]
+    };
   }
 
   /**
@@ -799,5 +932,160 @@ When the user asks you to reference "previous content", "above discussion", "上
     }
 
     return systemMessage;
+  }
+
+  /**
+   * Sanitize conversation messages for agent execution
+   *
+   * This method cleans up the conversation history to ensure API compatibility,
+   * especially for custom models that may have stricter message format requirements.
+   *
+   * @param messages - Original conversation history
+   * @param contextMode - Context mode (isolated or shared)
+   * @param agentModel - Agent's model identifier
+   * @returns Sanitized message array
+   */
+  private sanitizeMessagesForAgent(
+    messages: UnifiedMessage[],
+    contextMode: 'isolated' | 'shared',
+    agentModel?: string
+  ): UnifiedMessage[] {
+    // In isolated mode, messages are already clean (agent-specific only)
+    if (contextMode === 'isolated') {
+      return messages;
+    }
+
+    // In shared mode, we need to sanitize the main session history
+    // which may contain incompatible structures from different models
+
+    const sanitized: UnifiedMessage[] = [];
+
+    for (const msg of messages) {
+      // Skip messages with empty content
+      if (!msg.content || msg.content.length === 0) {
+        // console.warn('[AgentExecutor] Skipping message with empty content');
+        continue;
+      }
+
+      // Filter out empty content parts
+      const validContent = msg.content.filter(part => {
+        if (part.type === 'text') {
+          return typeof part.text === 'string' && part.text.trim().length > 0;
+        }
+        // Keep function calls and responses
+        if (part.type === 'function_call' || part.type === 'function_response') {
+          return true;
+        }
+        // Skip other types (images, etc.) for now to avoid compatibility issues
+        return false;
+      });
+
+      if (validContent.length === 0) {
+        console.warn('[AgentExecutor] Skipping message with no valid content parts');
+        continue;
+      }
+
+      // Create sanitized message
+      sanitized.push({
+        role: msg.role,
+        content: validContent,
+      });
+    }
+
+    // Limit history to last N messages to avoid overwhelming the API
+    // and reduce chances of format incompatibilities
+    const MAX_HISTORY = 50; // Configurable limit
+    let limitedMessages = sanitized;
+
+    if (sanitized.length > MAX_HISTORY) {
+      // Keep the most recent messages, but ensure we don't break conversation flow
+      // Always start with a user message if possible
+      limitedMessages = sanitized.slice(-MAX_HISTORY);
+
+      // If first message is not from user, prepend a context message
+      if (limitedMessages[0]?.role !== MessageRole.USER) {
+        console.log(`[AgentExecutor] Prepending context message to truncated history`);
+        limitedMessages.unshift({
+          role: MessageRole.USER,
+          content: [{
+            type: 'text',
+            text: '[Earlier conversation history truncated for API compatibility]'
+          }]
+        });
+      }
+
+      console.log(`[AgentExecutor] Limited message history: ${sanitized.length} → ${limitedMessages.length} messages`);
+    }
+
+    // CRITICAL: Enforce strict message ordering for OpenAI-compatible APIs
+    // Many providers require: user → assistant → tool → user pattern
+    const orderedMessages = this.enforceMessageOrdering(limitedMessages);
+
+    // Log sanitization results for debugging
+    // if (messages.length !== orderedMessages.length) {
+    //   console.log(`[AgentExecutor] Message sanitization: ${messages.length} → ${orderedMessages.length} messages (contextMode: ${contextMode})`);
+    // }
+
+    return orderedMessages;
+  }
+
+  /**
+   * Enforce strict message ordering required by OpenAI-compatible APIs
+   *
+   * Rules:
+   * - Must start with USER message
+   * - No consecutive messages with same role (except FUNCTION)
+   * - Remove orphaned FUNCTION messages (without preceding ASSISTANT with tool_calls)
+   *
+   * @param messages - Messages to validate and reorder
+   * @returns Properly ordered messages
+   */
+  private enforceMessageOrdering(messages: UnifiedMessage[]): UnifiedMessage[] {
+    if (messages.length === 0) {
+      return messages;
+    }
+
+    const ordered: UnifiedMessage[] = [];
+    let lastRole: MessageRole | null = null;
+
+    for (const msg of messages) {
+      // Skip consecutive messages with the same role (merge or skip)
+      if (msg.role === lastRole && msg.role !== MessageRole.FUNCTION) {
+        // For USER or ASSISTANT, merge content with previous message
+        if (ordered.length > 0) {
+          const lastMsg = ordered[ordered.length - 1];
+          // Append content to last message
+          lastMsg.content.push(...msg.content);
+          // console.log(`[AgentExecutor] Merged consecutive ${msg.role} messages`);
+        }
+        continue;
+      }
+
+      // Skip orphaned FUNCTION messages
+      if (msg.role === MessageRole.FUNCTION) {
+        // Check if previous message was ASSISTANT with function_call
+        if (lastRole !== MessageRole.ASSISTANT) {
+          // console.warn('[AgentExecutor] Skipping orphaned FUNCTION message');
+          continue;
+        }
+      }
+
+      ordered.push(msg);
+      lastRole = msg.role;
+    }
+
+    // Ensure first message is USER
+    if (ordered.length > 0 && ordered[0].role !== MessageRole.USER) {
+      // console.log('[AgentExecutor] Prepending USER message to fix ordering');
+      ordered.unshift({
+        role: MessageRole.USER,
+        content: [{
+          type: 'text',
+          text: '[Context from previous conversation]'
+        }]
+      });
+    }
+
+    return ordered;
   }
 }

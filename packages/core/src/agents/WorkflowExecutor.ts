@@ -14,6 +14,8 @@ import type {
   WorkflowExecutionResult,
 } from './types.js';
 import { WorkflowError } from './types.js';
+import type { UnifiedMessage } from '../adapters/base/types.js';
+import { MessageRole } from '../adapters/base/types.js';
 
 /**
  * Workflow Executor
@@ -37,6 +39,8 @@ export class WorkflowExecutor {
       onStepError?: (error: Error, step: WorkflowStep) => void;
       onToolCall?: (toolName: string, args: any, stepId: string) => void;
       onToolResult?: (toolName: string, result: any, stepId: string) => void;
+      writeToMainSession?: boolean;
+      customSummary?: (result: WorkflowExecutionResult) => string;
     }
   ): Promise<WorkflowExecutionResult> {
     const workflow = this.workflowManager.getWorkflow(workflowName);
@@ -166,7 +170,7 @@ export class WorkflowExecutor {
     // Build final output
     const finalOutput = this.buildFinalOutput(results, workflow);
 
-    return {
+    const result: WorkflowExecutionResult = {
       workflowName,
       status: finalStatus,
       steps: results,
@@ -174,6 +178,24 @@ export class WorkflowExecutor {
       error: finalError,
       duration: Date.now() - startTime,
     };
+
+    // If requested, write summary to main session (hybrid mode for workflows)
+    if (options?.writeToMainSession) {
+      const contextManager = this.agentExecutor.getContextManager();
+
+      const summaryText = options.customSummary
+        ? options.customSummary(result)
+        : this.buildWorkflowSummary(result);
+
+      const summaryMessage: UnifiedMessage = {
+        role: MessageRole.ASSISTANT,
+        content: [{ type: 'text', text: summaryText }]
+      };
+
+      contextManager.addHybridSummary(`workflow_${workflowName}`, summaryMessage);
+    }
+
+    return result;
   }
 
   /**
@@ -591,5 +613,27 @@ export class WorkflowExecutor {
     });
 
     return output;
+  }
+
+  /**
+   * Build workflow execution summary for main session (hybrid mode)
+   *
+   * @param result - Workflow execution result
+   * @returns Summary text
+   */
+  private buildWorkflowSummary(result: WorkflowExecutionResult): string {
+    let summary = `# Workflow: ${result.workflowName}\n\n`;
+    summary += `**Status**: ${result.status}\n`;
+    summary += `**Duration**: ${result.duration}ms\n`;
+    summary += `**Steps Completed**: ${result.steps.filter(s => s.status === 'completed').length}/${result.steps.length}\n\n`;
+
+    if (result.status === 'failed' && result.error) {
+      summary += `**Error**: ${result.error}\n\n`;
+    }
+
+    summary += `## Results\n\n`;
+    summary += result.output;
+
+    return summary;
   }
 }

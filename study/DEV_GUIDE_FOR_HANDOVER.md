@@ -138,7 +138,7 @@ if (config.getUseModelRouter()) {
 **位置**: `packages/cli/src/ui/components/AsciiArt.ts`
 
 **变更**: 更新 CLI 启动时的 ASCII 艺术标识
-- 可能添加 "tiangong"（天工）相关标记或 logo
+- 可能添加 "fuxi"（伏羲）相关标记或 logo
 - 仅影响视觉展示，无功能影响
 
 ---

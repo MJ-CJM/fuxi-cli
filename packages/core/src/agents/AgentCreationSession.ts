@@ -17,7 +17,7 @@ import {
  * This class manages the state for creating an agent through multiple steps:
  * 1. Name
  * 2. Title (optional)
- * 3. Description (optional)
+ * 3. Description (required)
  * 4. Scope (project/global)
  * 5. Model selection
  * 6. Context mode (isolated/shared)
@@ -53,7 +53,7 @@ export interface AgentCreationState {
   description?: string;
   scope?: 'project' | 'global';
   model?: string;
-  contextMode?: 'isolated' | 'shared';
+  contextMode?: 'isolated' | 'shared' | 'hybrid';
   contentMethod?: 'manual' | 'ai';
   purpose?: string;
   toolCategories?: ToolCategory[];
@@ -124,7 +124,7 @@ export class AgentCreationSession {
   }
 
   /**
-   * Set the description (optional) and move to next step
+   * Set the description (required) and move to next step
    */
   setDescription(description: string): CreationStep {
     this.state.description = description;
@@ -133,11 +133,19 @@ export class AgentCreationSession {
   }
 
   /**
-   * Skip description and move to next step
+   * Skip description (will be filled from purpose in AI mode)
    */
   skipDescription(): CreationStep {
+    // Leave description empty for now, will be filled from purpose in AI mode
     this.state.currentStep = CreationStep.SCOPE;
     return this.state.currentStep;
+  }
+
+  /**
+   * Update description without advancing step (for AI mode fallback)
+   */
+  updateDescription(description: string): void {
+    this.state.description = description;
   }
 
   /**
@@ -161,7 +169,7 @@ export class AgentCreationSession {
   /**
    * Set the context mode and move to next step
    */
-  setContextMode(mode: 'isolated' | 'shared'): CreationStep {
+  setContextMode(mode: 'isolated' | 'shared' | 'hybrid'): CreationStep {
     this.state.contextMode = mode;
     this.state.currentStep = CreationStep.CONTENT_METHOD;
     return this.state.currentStep;
@@ -357,8 +365,14 @@ How should this agent manage conversation context?
 
   **2** or **shared** - Shared
     • Agent references the main session conversation history
-    • Can see and participate in the broader conversation
-    • Ideal for multi-agent collaboration workflows
+    • All messages (including tool calls) are added to main session
+    • Can see the full context but may clutter main conversation
+
+  **3** or **hybrid** - Hybrid 🔥 (Recommended for automation)
+    • Agent reads from main session (sees context)
+    • Executes in isolated context (clean tool calls)
+    • Only writes final summary to main session (no clutter)
+    • Ideal for plan-todos, spec tasks, workflows
 
 Enter your choice (or press Enter for isolated):`;
 

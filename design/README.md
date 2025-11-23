@@ -1,4 +1,4 @@
-# TianGong CLI - 设计文档
+# Fuxi CLI - 设计文档
 
 > **设计文档和技术规范**
 
@@ -6,7 +6,7 @@
 
 ## 📋 概述
 
-本目录包含 TianGong CLI 所有核心功能的设计文档、实现细节和技术规范。文档按功能模块组织，从大功能到子功能分层管理。
+本目录包含 Fuxi CLI 所有核心功能的设计文档、实现细节和技术规范。文档按功能模块组织，从大功能到子功能分层管理。
 
 ---
 
@@ -220,11 +220,11 @@
 
 ## 💬 反馈与支持
 
-- 🐛 [提交 Bug](https://github.com/MJ-CJM/tiangong-cli/issues)
-- 💡 [功能建议](https://github.com/MJ-CJM/tiangong-cli/issues)
-- 📖 [文档改进](https://github.com/MJ-CJM/tiangong-cli/issues)
+- 🐛 [提交 Bug](https://github.com/MJ-CJM/fuxi-cli/issues)
+- 💡 [功能建议](https://github.com/MJ-CJM/fuxi-cli/issues)
+- 📖 [文档改进](https://github.com/MJ-CJM/fuxi-cli/issues)
 
 ---
 
 **最后更新**: 2025-10-14
-**维护者**: TianGong CLI Team
+**维护者**: Fuxi CLI Team

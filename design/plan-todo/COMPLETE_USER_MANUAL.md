@@ -1,4 +1,4 @@
-# TianGong CLI - Plan+Todo 模式使用手册
+# Fuxi CLI - Plan+Todo 模式使用手册
 
 ## 📖 目录
 
@@ -18,7 +18,7 @@
 
 ### 什么是 Plan+Todo 模式？
 
-Plan+Todo 模式是 TianGong CLI 的一项强大功能，它将复杂任务分解为两个阶段：
+Plan+Todo 模式是 Fuxi CLI 的一项强大功能，它将复杂任务分解为两个阶段：
 
 1. **Plan 阶段（规划）**：AI 分析需求，创建详细的执行计划
 2. **Todo 阶段（执行）**：将计划转换为可执行的任务列表，逐步完成
@@ -1057,7 +1057,7 @@ Current todo list:
 |--------|------|------|
 | `Ctrl+P` | 切换 Plan 模式 | 进入/退出 Plan 模式 |
 | `Ctrl+C` | 取消操作 | 取消当前执行 |
-| `Ctrl+D` | 退出 CLI | 退出 TianGong CLI |
+| `Ctrl+D` | 退出 CLI | 退出 Fuxi CLI |
 
 ---
 
@@ -1950,7 +1950,7 @@ git reset --hard HEAD~1
 
 **方法 2：手动修复**
 ```bash
-# 使用 TianGong CLI 修复
+# 使用 Fuxi CLI 修复
 > 撤销刚才对 User.ts 的修改
 ```
 
@@ -2347,7 +2347,7 @@ Steps (20):
 
 ## 结语
 
-恭喜！您已经掌握了 TianGong CLI 的 Plan+Todo 模式。
+恭喜！您已经掌握了 Fuxi CLI 的 Plan+Todo 模式。
 
 ### 核心要点回顾
 
@@ -2369,6 +2369,6 @@ Steps (20):
 
 *文档版本：1.0*  
 *最后更新：2025-10-16*  
-*TianGong CLI Plan+Todo 模式使用手册*
+*Fuxi CLI Plan+Todo 模式使用手册*
 
 

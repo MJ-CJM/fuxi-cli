@@ -837,21 +837,37 @@ export class GeminiClient {
       };
     }
 
-    // Skip token counting for custom models when using model router
-    if (this.config.getUseModelRouter()) {
-      return {
-        originalTokenCount: 0,
-        newTokenCount: 0,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
+    // NOTE: Token counting now enabled for all models including custom ones
+    // The customAdapter provides a universal token estimation algorithm
+    // TODO: Future enhancement - use model-specific token counting APIs when available
 
-    const { totalTokens: originalTokenCount } =
-      await this.getContentGeneratorOrFail().countTokens({
+    let originalTokenCount: number;
+
+    // Use different token counting method based on model router status
+    if (this.config.getUseModelRouter()) {
+      // Model router enabled: use ModelService for token counting
+      const modelService = new ModelService(this.config);
+      const historyMessages = curatedHistory.map((content) =>
+        APITranslator.geminiContentToUnified(content),
+      );
+
+      const unifiedRequest: UnifiedRequest = {
+        messages: historyMessages,
+        model,
+      };
+
+      const tokenResponse = await modelService.countTokens(unifiedRequest, model);
+      originalTokenCount = tokenResponse.tokenCount || 0;
+    } else {
+      // Traditional Gemini API: use contentGenerator
+      const tokenResponse = await this.getContentGeneratorOrFail().countTokens({
         model,
         contents: curatedHistory,
       });
-    if (originalTokenCount === undefined) {
+      originalTokenCount = tokenResponse.totalTokens || 0;
+    }
+
+    if (originalTokenCount === undefined || originalTokenCount === 0) {
       console.warn(`Could not determine token count for model ${model}.`);
       this.hasFailedCompressionAttempt = !force && true;
       return {
@@ -894,29 +910,71 @@ export class GeminiClient {
     const historyToCompress = curatedHistory.slice(0, compressBeforeIndex);
     const historyToKeep = curatedHistory.slice(compressBeforeIndex);
 
-    const summaryResponse = await this.config
-      .getContentGenerator()
-      .generateContent(
+    // Generate compression summary using appropriate method
+    let summary: string;
+
+    if (this.config.getUseModelRouter()) {
+      // Model router enabled: use ModelService for summary generation
+      const modelService = new ModelService(this.config);
+
+      // Convert history to unified format
+      const historyMessages = historyToCompress.map((content) =>
+        APITranslator.geminiContentToUnified(content),
+      );
+
+      // Add the compression instruction as the last message
+      const compressionMessages = [
+        ...historyMessages,
         {
-          model,
-          contents: [
-            ...historyToCompress,
+          role: MessageRole.USER,
+          content: [
             {
-              role: 'user',
-              parts: [
-                {
-                  text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
-                },
-              ],
+              type: 'text' as const,
+              text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
             },
           ],
-          config: {
-            systemInstruction: { text: getCompressionPrompt() },
-          },
         },
-        prompt_id,
-      );
-    const summary = getResponseText(summaryResponse) ?? '';
+      ];
+
+      const unifiedRequest: UnifiedRequest = {
+        messages: compressionMessages,
+        model,
+        systemMessage: getCompressionPrompt(),
+        temperature: 0.1,
+      };
+
+      const response = await modelService.generateContent(unifiedRequest, model);
+      // Extract text from ContentPart array
+      summary = response.content
+        .filter(part => part.type === 'text')
+        .map(part => part.text || '')
+        .join('') || '';
+    } else {
+      // Traditional Gemini API: use contentGenerator
+      const summaryResponse = await this.config
+        .getContentGenerator()
+        .generateContent(
+          {
+            model,
+            contents: [
+              ...historyToCompress,
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+                  },
+                ],
+              },
+            ],
+            config: {
+              systemInstruction: { text: getCompressionPrompt() },
+            },
+          },
+          prompt_id,
+        );
+      summary = getResponseText(summaryResponse) ?? '';
+    }
 
     const chat = await this.startChat([
       {
@@ -931,13 +989,35 @@ export class GeminiClient {
     ]);
     this.forceFullIdeContext = true;
 
-    const { totalTokens: newTokenCount } =
-      await this.getContentGeneratorOrFail().countTokens({
-        // model might change after calling `sendMessage`, so we get the newest value from config
-        model: this.config.getModel(),
-        contents: chat.getHistory(),
+    // Count tokens in the compressed history using the same method
+    let newTokenCount: number;
+    const compressedHistory = chat.getHistory();
+    const currentModel = this.config.getModel();
+
+    if (this.config.getUseModelRouter()) {
+      // Model router enabled: use ModelService for token counting
+      const modelService = new ModelService(this.config);
+      const compressedMessages = compressedHistory.map((content) =>
+        APITranslator.geminiContentToUnified(content),
+      );
+
+      const unifiedRequest: UnifiedRequest = {
+        messages: compressedMessages,
+        model: currentModel,
+      };
+
+      const tokenResponse = await modelService.countTokens(unifiedRequest, currentModel);
+      newTokenCount = tokenResponse.tokenCount || 0;
+    } else {
+      // Traditional Gemini API: use contentGenerator
+      const tokenResponse = await this.getContentGeneratorOrFail().countTokens({
+        model: currentModel,
+        contents: compressedHistory,
       });
-    if (newTokenCount === undefined) {
+      newTokenCount = tokenResponse.totalTokens || 0;
+    }
+
+    if (newTokenCount === undefined || newTokenCount === 0) {
       console.warn('Could not determine compressed history token count.');
       this.hasFailedCompressionAttempt = !force && true;
       return {
@@ -990,6 +1070,15 @@ export class GeminiClient {
 
       const history = this.getChat().getHistory(true);
       const userContent = createUserContent(request);
+
+      // DEBUG: Print complete main session history
+      // console.error('\n' + '='.repeat(100));
+      // console.error(`[MainSession] 📤 SENDING REQUEST TO MODEL`);
+      // console.error(`[MainSession] 📊 History count: ${history.length} messages`);
+      // console.error(`[MainSession] 📋 Complete conversation history:`);
+      // console.error(JSON.stringify(history, null, 2));
+      // console.error('='.repeat(100) + '\n');
+
       const historyMessages = history.map((content) =>
         APITranslator.geminiContentToUnified(content),
       );
@@ -1139,6 +1228,17 @@ export class GeminiClient {
       this.getChat().addHistory(modelResponse);
 
       const finishReason = this.mapFinishReason(response.finishReason);
+
+      // Debug: Log usage info to help diagnose token count issues
+      if (process.env['DEBUG_TOKEN_COUNT']) {
+        logger.info('Response usage metadata', {
+          hasUsage: !!response.usage,
+          usage: response.usage,
+          promptTokens: response.usage?.promptTokens,
+          totalTokens: response.usage?.totalTokens
+        });
+      }
+
       yield {
         type: GeminiEventType.Finished,
         value: {

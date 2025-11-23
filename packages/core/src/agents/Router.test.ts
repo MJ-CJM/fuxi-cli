@@ -19,6 +19,7 @@ describe('Router', () => {
   beforeEach(() => {
     mockConfig = {
       getTargetDir: vi.fn().mockReturnValue('/test'),
+      getModel: vi.fn().mockReturnValue(null),
     } as any;
 
     mockAgentManager = {} as any;

@@ -14,6 +14,7 @@ import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { AuthInProgress } from '../auth/AuthInProgress.js';
 import { AuthDialog } from '../auth/AuthDialog.js';
+import { ConfigFilesMissingPrompt } from '../ConfigFilesMissingPrompt.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
@@ -149,6 +150,9 @@ export const DialogManager = ({
   }
   if (uiState.isModelDialogOpen) {
     return <ModelDialog onClose={uiActions.closeModelDialog} />;
+  }
+  if (uiState.configFilesMissingError) {
+    return <ConfigFilesMissingPrompt errorMessage={uiState.configFilesMissingError} />;
   }
   if (uiState.isAuthenticating) {
     return (

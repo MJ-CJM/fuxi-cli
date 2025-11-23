@@ -75,37 +75,41 @@ export class APITranslator {
                  message.role === MessageRole.ASSISTANT ? 'model' :
                  'user'; // Default to user for system messages
 
-    const parts = message.content.map(part => {
-      switch (part.type) {
-        case 'text':
-          return { text: part.text };
-        case 'image':
-          return {
-            inlineData: {
-              data: part.image?.data,
-              mimeType: part.image?.mimeType
-            }
-          };
-        case 'function_call':
-          return {
-            functionCall: {
-              name: part.functionCall?.name,
-              args: part.functionCall?.args,
-              id: part.functionCall?.id,
-            }
-          };
-        case 'function_response':
-          return {
-            functionResponse: {
-              name: part.functionResponse?.name,
-              response: part.functionResponse?.content,
-              id: part.functionResponse?.id,
-            }
-          };
-        default:
-          return { text: part.text || '' };
-      }
-    });
+    const parts = message.content
+      .map(part => {
+        switch (part.type) {
+          case 'text':
+            return typeof part.text === 'string' && part.text.trim().length > 0
+              ? { text: part.text }
+              : null;
+          case 'image':
+            return {
+              inlineData: {
+                data: part.image?.data,
+                mimeType: part.image?.mimeType
+              }
+            };
+          case 'function_call':
+            return {
+              functionCall: {
+                name: part.functionCall?.name,
+                args: part.functionCall?.args,
+                id: part.functionCall?.id,
+              }
+            };
+          case 'function_response':
+            return {
+              functionResponse: {
+                name: part.functionResponse?.name,
+                response: part.functionResponse?.content,
+                id: part.functionResponse?.id,
+              }
+            };
+          default:
+            return null;
+        }
+      })
+      .filter((part): part is Exclude<typeof part, null> => part !== null);
 
     return { role, parts };
   }
@@ -285,6 +289,9 @@ export class APITranslator {
 
     // Add text parts
     for (const part of textParts) {
+      if (typeof part.text === 'string' && part.text.trim().length === 0) {
+        continue;
+      }
       content.push({
         type: 'text',
         text: part.text

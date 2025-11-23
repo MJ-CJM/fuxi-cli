@@ -143,6 +143,13 @@ export interface LoadHistoryActionReturn {
 export interface SubmitPromptActionReturn {
   type: 'submit_prompt';
   content: PartListUnion;
+  /** Optional agent routing configuration */
+  agentOptions?: {
+    /** Force use of specific agent (e.g., --agent planner) */
+    agent?: string;
+    /** Disable automatic routing (e.g., --no-routing) */
+    noRouting?: boolean;
+  };
 }
 
 /**

@@ -43,7 +43,7 @@ import type {
   HistoryItemToolGroup,
   SlashCommandProcessorResult,
 } from '../types.js';
-import { StreamingState, MessageType, ToolCallStatus } from '../types.js';
+import { StreamingState, MessageType, ToolCallStatus, type IndividualToolCallDisplay } from '../types.js';
 import { isAtCommand, isSlashCommand } from '../utils/commandUtils.js';
 import { useShellCommandProcessor } from './shellCommandProcessor.js';
 import { handleAtCommand } from './atCommandProcessor.js';
@@ -80,6 +80,30 @@ function showCitations(settings: LoadedSettings): boolean {
     return enabled;
   }
   return true;
+}
+
+/**
+ * Format tool arguments for display in the UI
+ */
+function formatToolArgs(toolName: string, args: Record<string, any>): string {
+  // For common tools, format the arguments in a readable way
+  const formatters: Record<string, (args: Record<string, any>) => string> = {
+    read_file: (args) => `Read: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    write_file: (args) => `Write: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    replace: (args) => `Edit: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    bash: (args) => `Run: ${args['command'] || 'unknown'}`,
+    glob: (args) => `Search: ${args['pattern'] || 'unknown'}`,
+    grep: (args) => `Grep: ${args['pattern'] || 'unknown'}`,
+  };
+
+  const formatter = formatters[toolName];
+  if (formatter) {
+    return formatter(args);
+  }
+
+  // Default: show tool name with argument count
+  const argCount = Object.keys(args).length;
+  return `${toolName} (${argCount} arg${argCount !== 1 ? 's' : ''})`;
 }
 
 /**
@@ -512,7 +536,340 @@ export const useGeminiStream = (
             }
             case 'submit_prompt': {
               localQueryToSendToGemini = slashCommandResult.content;
+              const agentOptions = slashCommandResult.agentOptions;
 
+              // Debug: log received agentOptions
+              console.log('[AGENT_ROUTING] Received agentOptions from slashCommandResult:', agentOptions);
+
+              // Check if we should use agent routing
+              const shouldRouteToAgent = await (async () => {
+                // 1. Disable agent routing in Plan mode (tools need to be called in main flow)
+                if (planModeActive) {
+                  onDebugMessage('[AGENT_ROUTING] Disabled in Plan mode (tool calls required)');
+                  return false;
+                }
+
+                // 2. Explicit disable via --no-routing
+                if (agentOptions?.noRouting) {
+                  onDebugMessage('[AGENT_ROUTING] Disabled by --no-routing flag');
+                  return false;
+                }
+
+                // 3. Explicit agent specified via --agent
+                if (agentOptions?.agent) {
+                  onDebugMessage(`[AGENT_ROUTING] Explicit agent specified: ${agentOptions.agent}`);
+                  return true;
+                }
+
+                // 4. Check configuration
+                const routingConfig = settings?.merged?.experimental?.agentRoutingForCommands;
+                if (routingConfig === 'disabled') {
+                  onDebugMessage('[AGENT_ROUTING] Disabled by config');
+                  return false;
+                }
+
+                if (routingConfig === 'enabled') {
+                  onDebugMessage('[AGENT_ROUTING] Enabled by config');
+                  return true;
+                }
+
+                // 5. Smart default (auto): check if agents exist and routing is enabled
+                try {
+                  const executor = await config.getAgentExecutor();
+                  const router = executor?.getRouter();
+
+                  if (!router || !router.isEnabled()) {
+                    onDebugMessage('[AGENT_ROUTING] Router not enabled');
+                    return false;
+                  }
+
+                  // Check if there are any available agents
+                  const agentManager = executor.getAgentManager();
+                  const agents = agentManager.listAgents();
+
+                  if (agents.length === 0) {
+                    onDebugMessage('[AGENT_ROUTING] No agents available');
+                    return false;
+                  }
+
+                  onDebugMessage(`[AGENT_ROUTING] Auto-enabled (${agents.length} agents available, routing enabled)`);
+                  return true;
+                } catch (error) {
+                  onDebugMessage(`[AGENT_ROUTING] Error checking agents: ${error instanceof Error ? error.message : String(error)}`);
+                  return false;
+                }
+              })();
+
+              // Route to agent if needed
+              if (shouldRouteToAgent) {
+                try {
+                  console.log('[AGENT_ROUTING] Before execution, agentOptions:', agentOptions);
+                  const executor = await config.getAgentExecutor();
+                  const prompt = typeof localQueryToSendToGemini === 'string'
+                    ? localQueryToSendToGemini
+                    : localQueryToSendToGemini.toString();
+
+                  let agentResponse;
+
+                  if (agentOptions?.agent) {
+                    // Execute with specific agent
+                    onDebugMessage(`[AGENT_ROUTING] Executing with agent: ${agentOptions.agent}`);
+                    addItem(
+                      {
+                        type: MessageType.INFO,
+                        text: `🤖 Using agent: **${agentOptions.agent}**`
+                      },
+                      Date.now()
+                    );
+
+                    agentResponse = await executor.execute(agentOptions.agent, prompt, {
+                      // Use agent's defined contextMode (don't override)
+                      // Show tool calls in real-time (in UI only)
+                      onToolCall: (toolName: string, args: Record<string, any>) => {
+                        // Format tool arguments for display
+                        const argsDisplay = formatToolArgs(toolName, args);
+
+                        // Create a tool display with detailed description
+                        const toolDisplay: IndividualToolCallDisplay = {
+                          callId: `agent-${agentOptions.agent}-${toolName}-${Date.now()}`,
+                          name: toolName,
+                          description: argsDisplay,
+                          status: ToolCallStatus.Success,
+                          resultDisplay: undefined,
+                          confirmationDetails: undefined,
+                        };
+
+                        addItem(
+                          {
+                            type: 'tool_group',
+                            tools: [toolDisplay],
+                          } as any,
+                          Date.now()
+                        );
+                      },
+                      onToolResult: (toolName: string, result: any, error?: Error) => {
+                        if (error) {
+                          addItem(
+                            {
+                              type: MessageType.ERROR,
+                              text: `❌ Tool ${toolName} failed: ${error.message}`
+                            },
+                            Date.now()
+                          );
+                        }
+                        // Success case: tool_group already shows checkmark
+                        // Could optionally show result summary here in the future
+                      }
+                    });
+
+                    // Display the actual context mode used
+                    const actualMode = agentResponse?.metadata?.contextMode || 'default';
+                    addItem(
+                      {
+                        type: MessageType.INFO,
+                        text: `✅ Agent run completed: **${agentOptions.agent}** (${actualMode} mode)`
+                      },
+                      Date.now()
+                    );
+                  } else {
+                    // Auto-route to best agent
+                    onDebugMessage('[AGENT_ROUTING] Auto-routing to best agent');
+
+                    agentResponse = await executor.executeWithRouting(prompt, {
+                      // Use agent's defined contextMode (don't override)
+                      // Show tool calls in real-time for auto-routed agents too
+                      onToolCall: (toolName: string, args: Record<string, any>) => {
+                        // Format tool arguments for display
+                        const argsDisplay = formatToolArgs(toolName, args);
+
+                        // Create a tool display with detailed description
+                        const toolDisplay: IndividualToolCallDisplay = {
+                          callId: `agent-auto-${toolName}-${Date.now()}`,
+                          name: toolName,
+                          description: argsDisplay,
+                          status: ToolCallStatus.Success,
+                          resultDisplay: undefined,
+                          confirmationDetails: undefined,
+                        };
+
+                        addItem(
+                          {
+                            type: 'tool_group',
+                            tools: [toolDisplay],
+                          } as any,
+                          Date.now()
+                        );
+                      },
+                      onToolResult: (toolName: string, result: any, error?: Error) => {
+                        if (error) {
+                          addItem(
+                            {
+                              type: MessageType.ERROR,
+                              text: `❌ Tool ${toolName} failed: ${error.message}`
+                            },
+                            Date.now()
+                          );
+                        }
+                        // Success case: no need to show anything, tool_group already shows checkmark
+                      }
+                    });
+
+                    if (agentResponse.routedAgent) {
+                      addItem(
+                        {
+                          type: MessageType.INFO,
+                          text: `🤖 Auto-routed to agent: **${agentResponse.routedAgent}**`
+                        },
+                        Date.now()
+                      );
+                    }
+
+                    // Display the actual context mode used
+                    const actualMode = agentResponse?.metadata?.contextMode || 'default';
+                    addItem(
+                      {
+                        type: MessageType.INFO,
+                        text: `✅ Agent run completed via auto-routing (${actualMode} mode)`
+                      },
+                      Date.now()
+                    );
+                  }
+
+                  // Display agent response
+                  addItem(
+                    { type: MessageType.GEMINI, text: agentResponse.text },
+                    Date.now()
+                  );
+                  const routedAgent = (agentResponse as any)?.routedAgent as
+                    | string
+                    | undefined;
+                  const completedAgent =
+                    agentOptions?.agent || routedAgent || 'auto-routed agent';
+
+                  // Sync hybrid mode summary back to main session
+                  // Check if agent uses hybrid mode by reading from agent definition
+                  try {
+                    const agentManager = executor.getAgentManager();
+                    const agentDef = agentManager.getAgent(completedAgent);
+                    const actualContextMode = agentResponse.metadata?.contextMode || agentDef?.contextMode;
+
+                    // console.error(`[HybridMode] Checking sync conditions:`, {
+                    //   completedAgent,
+                    //   actualContextMode,
+                    //   metadataContextMode: agentResponse.metadata?.contextMode,
+                    //   agentDefContextMode: agentDef?.contextMode
+                    // });
+
+                    if (actualContextMode === 'hybrid') {
+                      // console.error('[HybridMode] Syncing to geminiClient (user question + agent summary)');
+
+                      // STEP 1: Add user's original question to main history
+                      // (since agent routing bypasses normal geminiClient flow)
+                      const userPromptText = typeof localQueryToSendToGemini === 'string'
+                        ? localQueryToSendToGemini
+                        : String(localQueryToSendToGemini);
+                      const userQuestion = {
+                        role: 'user' as const,
+                        parts: [{ text: userPromptText }],
+                      };
+                      await geminiClient.addHistory(userQuestion);
+                      // console.error(`[HybridMode] ✅ Added user question to geminiClient: "${userPromptText.substring(0, 50)}..."`);
+
+                      // STEP 2: Add agent's hybrid summary to main history
+                      const contextManager = executor.getContextManager();
+                      const mainContext = contextManager.getMainSessionContext();
+
+                      // console.error(`[HybridMode] Main context has ${mainContext.length} messages`);
+
+                      // Get the last message (the hybrid summary we just added)
+                      const lastMessage = mainContext[mainContext.length - 1];
+                      if (lastMessage && lastMessage.metadata?.['source'] === 'hybrid_agent') {
+                        // Convert UnifiedMessage to Gemini Content format
+                        const textParts = lastMessage.content
+                          .filter(part => part.type === 'text')
+                          .map(part => ({ text: part.text || '' }));
+
+                        const geminiContent = {
+                          role: lastMessage.role === 'user' ? 'user' : 'model',
+                          parts: textParts,
+                        };
+
+                        await geminiClient.addHistory(geminiContent);
+                        // console.error(`[HybridMode] ✅ Successfully synced hybrid summary to geminiClient (agent: ${lastMessage.metadata?.['agentName']})`);
+
+                        // DEBUG: Print complete main session history after sync
+                        // try {
+                        //   const completeHistory = await geminiClient.getHistory();
+                        //   console.error(`[HybridMode] 📋 Complete main session history (${completeHistory.length} messages):`);
+                        //   console.error(JSON.stringify(completeHistory, null, 2));
+                        // } catch (err) {
+                        //   console.error('[HybridMode] Failed to get complete history:', err);
+                        // }
+                      } else {
+                        // console.error(`[HybridMode] ⚠️ Last message is not a hybrid summary, skipping sync`);
+                      }
+                    } else {
+                      // console.error(`[HybridMode] Context mode is ${actualContextMode}, not hybrid - skipping sync`);
+                    }
+                  } catch (error) {
+                    // console.error('[HybridMode] ❌ Failed to sync summary to geminiClient:', error);
+                  }
+
+                  // Auto-update todo status for agent-executed todos
+                  const currentTodos = todosRef.current;
+                  const currentUpdateTodo = updateTodoRef.current;
+                  const currentQueue = executionQueueRef.current;
+                  const currentSubmitQuery = submitQueryRef.current;
+
+                  // Mark single todo as completed (if not in batch mode)
+                  if (currentTodos && currentUpdateTodo && (!currentQueue || !currentQueue.active)) {
+                    const inProgress = currentTodos.filter(t => t.status === 'in_progress');
+                    if (inProgress.length === 1) {
+                      console.log('[AGENT_ROUTING] Auto-completing single todo:', inProgress[0].id);
+                      currentUpdateTodo(inProgress[0].id, {
+                        status: 'completed',
+                        completedAt: new Date(),
+                      });
+                    }
+                  }
+
+                  // Handle batch execution continuation
+                  if (currentQueue && currentQueue.active && currentSubmitQuery) {
+                    console.log('[AGENT_ROUTING] Batch execution active, continuing to next todo');
+                    // Trigger next todo execution asynchronously
+                    setTimeout(async () => {
+                      const nextPrompt = await handleNextTodo();
+                      if (nextPrompt && currentSubmitQuery) {
+                        currentSubmitQuery(nextPrompt);
+                      }
+                    }, 100);
+                  }
+
+                  addItem(
+                    {
+                      type: MessageType.INFO,
+                      text: `✅ Agent execution finished using **${completedAgent}**`,
+                    },
+                    Date.now(),
+                  );
+
+                  // Don't proceed to main model
+                  return { queryToSend: null, shouldProceed: false };
+
+                } catch (error) {
+                  // Agent routing failed, fallback to main model
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  onDebugMessage(`[AGENT_ROUTING] Failed: ${errorMessage}, falling back to main model`);
+
+                  // Show a brief notice
+                  addItem(
+                    { type: MessageType.INFO, text: `⚠️ Agent routing failed (${agentOptions?.agent || 'auto'}), using main model` },
+                    Date.now()
+                  );
+                }
+              }
+
+              // Proceed with main model (either no routing needed or fallback)
               return {
                 queryToSend: localQueryToSendToGemini,
                 shouldProceed: true,
@@ -615,6 +972,62 @@ export const useGeminiStream = (
   );
 
   // --- Stream Event Handlers ---
+
+  /**
+   * Detects and parses XML format tool calls from text (e.g., <function=read_file>...)
+   * This is a fallback for models that output XML instead of standard function calls
+   */
+  const parseXmlToolCalls = useCallback(
+    (text: string, prompt_id?: string): ToolCallRequestInfo[] => {
+      const toolCalls: ToolCallRequestInfo[] = [];
+      
+      // Pattern to match XML-style tool calls like:
+      // <function=read_file>
+      //   <parameter=absolute_path>/path/to/file</parameter>
+      // </function>
+      const xmlToolCallPattern = /<function=(\w+)>([\s\S]*?)<\/function>/g;
+      let match;
+      
+      while ((match = xmlToolCallPattern.exec(text)) !== null) {
+        const toolName = match[1];
+        const paramsText = match[2];
+        const args: Record<string, any> = {};
+        
+        // Parse parameters from XML format
+        // <parameter=param_name>value</parameter>
+        const paramPattern = /<parameter=(\w+)>([\s\S]*?)<\/parameter>/g;
+        let paramMatch;
+        
+        while ((paramMatch = paramPattern.exec(paramsText)) !== null) {
+          const paramName = paramMatch[1];
+          let paramValue = paramMatch[2].trim();
+          
+          // Try to parse as JSON if it looks like JSON
+          try {
+            if (paramValue.startsWith('[') || paramValue.startsWith('{')) {
+              paramValue = JSON.parse(paramValue);
+            }
+          } catch {
+            // Keep as string if not valid JSON
+          }
+          
+          args[paramName] = paramValue;
+        }
+        
+        // Create tool call request
+        toolCalls.push({
+          callId: `${toolName}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name: toolName,
+          args,
+          isClientInitiated: false,
+          prompt_id: prompt_id || '',
+        });
+      }
+      
+      return toolCalls;
+    },
+    [],
+  );
 
   const handleContentEvent = useCallback(
     (
@@ -954,6 +1367,7 @@ export const useGeminiStream = (
       stream: AsyncIterable<GeminiEvent>,
       userMessageTimestamp: number,
       signal: AbortSignal,
+      prompt_id?: string,
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
@@ -1019,6 +1433,41 @@ export const useGeminiStream = (
           }
         }
       }
+      
+      // After stream processing, check for XML format tool calls in the final buffer
+      // This handles cases where models output XML instead of standard function calls
+      const finalBuffer = pendingHistoryItemRef.current?.text || geminiMessageBuffer;
+      if (finalBuffer) {
+        const xmlToolCalls = parseXmlToolCalls(finalBuffer, prompt_id);
+        if (xmlToolCalls.length > 0) {
+          // Remove XML tool calls from the displayed text
+          // Match patterns like: <function=name>...</function></tool_call>
+          let cleanedText = finalBuffer;
+          cleanedText = cleanedText.replace(/✦\s*<function=[^>]*>[\s\S]*?<\/function>\s*<\/tool_call>/g, '');
+          cleanedText = cleanedText.replace(/<function=[^>]*>[\s\S]*?<\/function>\s*<\/tool_call>/g, '');
+          
+          // Update the pending history item with cleaned text
+          if (pendingHistoryItemRef.current) {
+            setPendingHistoryItem({
+              type: pendingHistoryItemRef.current.type as 'gemini' | 'gemini_content',
+              text: cleanedText.trim(),
+            });
+          }
+          
+          // Add parsed tool calls to the request list
+          toolCallRequests.push(...xmlToolCalls);
+          
+          // Show info message about XML tool call detection
+          addItem(
+            {
+              type: MessageType.INFO,
+              text: `⚠️  Detected ${xmlToolCalls.length} XML format tool call(s). Attempting to parse and execute...`,
+            },
+            userMessageTimestamp,
+          );
+        }
+      }
+      
       if (toolCallRequests.length > 0) {
         scheduleToolCalls(toolCallRequests, signal);
       }
@@ -1034,6 +1483,11 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
+      parseXmlToolCalls,
+      planModeActive,
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
     ],
   );
 
@@ -1098,16 +1552,18 @@ export const useGeminiStream = (
         setIsResponding(true);
         setInitError(null);
 
+        let processingStatus: StreamProcessingStatus | null = null;
         try {
           const stream = geminiClient.sendMessageStream(
             queryToSend,
             abortSignal,
             prompt_id,
           );
-          const processingStatus = await processGeminiStreamEvents(
+          processingStatus = await processGeminiStreamEvents(
             stream,
             userMessageTimestamp,
             abortSignal,
+            prompt_id,
           );
 
           if (processingStatus === StreamProcessingStatus.UserCancelled) {
@@ -1143,9 +1599,33 @@ export const useGeminiStream = (
         } finally {
           setIsResponding(false);
           
-          // Check if we should continue batch execution using refs to get latest values
           const currentQueue = executionQueueRef.current;
           const currentSetExecutionQueue = setExecutionQueueRef.current;
+          const currentUpdateTodo = updateTodoRef.current;
+          const currentTodos = todosRef.current;
+          
+          // If this was a single todo execution (no batch queue) and completed successfully,
+          // auto-mark the in-progress todo as completed to keep the UI in sync.
+          if (
+            processingStatus === StreamProcessingStatus.Completed &&
+            (!currentQueue || !currentQueue.active) &&
+            currentUpdateTodo &&
+            currentTodos
+          ) {
+            const inProgress = currentTodos.filter(t => t.status === 'in_progress');
+            if (inProgress.length === 1) {
+              currentUpdateTodo(inProgress[0].id, {
+                status: 'completed',
+                completedAt: new Date(),
+              });
+            }
+          }
+          
+          // If Plan mode is active, avoid auto-continuing batch execution,
+          // but still allow the above status sync to occur.
+          if (planModeActive) {
+            return;
+          }
           
           console.log('[Batch Execution] Finally block reached', {
             hasExecutionQueue: !!currentQueue,

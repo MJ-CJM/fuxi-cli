@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type {
   ModelConfig,
   UnifiedRequest,
@@ -182,16 +184,55 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
 
-      // Debug: Log the system message being sent
-      if (process.env['DEBUG_MODEL_REQUESTS']) {
-        const systemMsg = openaiRequest.messages?.find((m: any) => m.role === 'system');
-        if (systemMsg) {
-          console.log('[DEBUG] System message preview:', systemMsg.content?.substring(0, 200));
-        }
-        console.log('[DEBUG] Sending to:', this.getBaseUrl(), 'Model:', openaiRequest.model);
+      // Note: stream_options can only be used with stream: true
+      // In non-streaming mode, usage is included by default in the response
+
+      const extraParams = this.config.options?.['requestBody'];
+      if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+        Object.assign(openaiRequest, extraParams);
       }
 
+      const debugRequests =
+        Boolean(process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG']);
+
+      if (debugRequests) {
+        try {
+          console.log('[OpenAIAdapter] Sending request', {
+            provider: this.config.provider,
+            model: this.config.model,
+            endpoint: '/chat/completions',
+            body: openaiRequest,
+          });
+        } catch (error) {
+          console.warn(
+            '[OpenAIAdapter] Failed to log request payload for debugging:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
+      // DEBUG: Print complete request including tools
+      // console.error('\n' + '='.repeat(100));
+      // console.error('[ModelRequest] 📤 COMPLETE REQUEST TO MODEL API');
+      // console.error(`[ModelRequest] 🎯 Model: ${openaiRequest.model}`);
+      // console.error(`[ModelRequest] 🔧 Tools count: ${openaiRequest.tools?.length || 0}`);
+      // console.error(`[ModelRequest] 📨 Messages count: ${openaiRequest.messages?.length || 0}`);
+      // console.error('[ModelRequest] 📋 Full request body:');
+      // console.error(JSON.stringify(openaiRequest, null, 2));
+      // console.error('='.repeat(100) + '\n');
+
       const response = await this.makeRequest('/chat/completions', openaiRequest);
+
+      // Debug: Log response usage to help diagnose token count issues
+      if (process.env['DEBUG_TOKEN_COUNT']) {
+        console.log('[OpenAIAdapter] Response usage:', {
+          hasUsage: !!response.usage,
+          usage: response.usage,
+          model: response.model
+        });
+      }
 
       return APITranslator.openaiResponseToUnified(response);
     } catch (error) {
@@ -226,6 +267,38 @@ export class OpenAIAdapter extends AbstractModelClient {
       const openaiRequest = APITranslator.unifiedToOpenaiRequest(cleanedRequest, supportsMultimodal);
       openaiRequest.model = this.config.model;
       openaiRequest.stream = true;
+
+      // IMPORTANT: Request usage information in streaming responses
+      // Some OpenAI-compatible APIs (like Qwen) require this to get token counts
+      if (!openaiRequest.stream_options) {
+        openaiRequest.stream_options = { include_usage: true };
+      }
+
+      const extraParams = this.config.options?.['requestBody'];
+      if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+        Object.assign(openaiRequest, extraParams);
+      }
+
+      const debugRequests =
+        Boolean(process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG_MODEL_REQUESTS']) ||
+        Boolean(process.env['DEBUG']);
+
+      if (debugRequests) {
+        try {
+          console.log('[OpenAIAdapter] Sending stream request', {
+            provider: this.config.provider,
+            model: this.config.model,
+            endpoint: '/chat/completions',
+            body: openaiRequest,
+          });
+        } catch (error) {
+          console.warn(
+            '[OpenAIAdapter] Failed to log streaming payload for debugging:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
 
       const response = await this.makeRequest('/chat/completions', openaiRequest, { stream: true });
 
@@ -275,7 +348,7 @@ export class OpenAIAdapter extends AbstractModelClient {
                   delta: unifiedResponse,
                   done: false
                 };
-              } catch (parseError) {
+              } catch (_parseError) {
                 // Skip malformed chunks
                 continue;
               }
@@ -302,16 +375,23 @@ export class OpenAIAdapter extends AbstractModelClient {
    * Count tokens for the request (approximate, as OpenAI doesn't provide exact token counting)
    */
   async countTokens(request: UnifiedRequest): Promise<TokenCountResponse> {
-    // OpenAI doesn't provide a direct token counting API
-    // We'll use a rough estimation based on text length
+    // Universal token estimation algorithm
+    // Supports mixed Chinese and English content
     const textContent = request.messages
       .flatMap(msg => msg.content)
       .filter(part => part.type === 'text')
       .map(part => part.text || '')
       .join(' ');
 
-    // Rough estimation: ~4 characters per token
-    const estimatedTokens = Math.ceil(textContent.length / 4);
+    // Improved estimation:
+    // - Chinese characters: ~1.5 chars per token (CJK tokenizers are more efficient)
+    // - English/other: ~4 chars per token (standard GPT tokenizer ratio)
+    const chineseRegex = /[\u4e00-\u9fa5]/g;
+    const chineseMatches = textContent.match(chineseRegex);
+    const chineseChars = chineseMatches ? chineseMatches.length : 0;
+    const otherChars = textContent.length - chineseChars;
+
+    const estimatedTokens = Math.ceil(chineseChars / 1.5 + otherChars / 4);
 
     return {
       tokenCount: estimatedTokens
@@ -368,7 +448,7 @@ export class OpenAIAdapter extends AbstractModelClient {
         model.includes('o1') ||
         model.includes('claude') // In case using OpenAI-compatible endpoint
       );
-    } catch (error) {
+    } catch (_error) {
       // Return common models if API call fails
       return [
         'gpt-4o',

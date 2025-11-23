@@ -16,6 +16,7 @@ import {
 } from './tools.js';
 import type { TechnicalPlan, Specification } from '../spec/types.js';
 import { SpecManager } from '../spec/SpecManager.js';
+import { formatConstitutionForAI } from '../spec/ConstitutionFormatter.js';
 
 /**
  * Parameters for the create_tech_plan tool
@@ -95,6 +96,9 @@ class CreateTechPlanToolInvocation extends BaseToolInvocation<
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const specManager = new SpecManager(this.config);
+
+    // Load constitution for context
+    const constitution = specManager.loadConstitution();
 
     // Verify spec exists
     if (!specManager.specExists(this.params.specId)) {
@@ -247,8 +251,15 @@ class CreateTechPlanToolInvocation extends BaseToolInvocation<
     output += `- List all plans: \`/spec plan list ${this.params.specId}\`\n`;
     output += `- Generate tasks: Use \`spec_to_tasks\` tool with planId: \`${planId}\`\n`;
 
+    // Build llmContent with Constitution context if available
+    let llmContent = '';
+    if (constitution) {
+      llmContent += formatConstitutionForAI(constitution) + '\n\n';
+    }
+    llmContent += `Successfully created technical plan '${planId}' (${version}) for specification '${this.params.specId}'. This is now the active plan. The plan includes architecture design (${this.params.architecture.components.length} components), implementation details (${this.params.implementation.files.length} files), ${this.params.risks.length} technical risks with mitigation strategies, and comprehensive testing strategy. Estimated duration: ${this.params.estimatedDuration}. Saved to ${planPath}`;
+
     return {
-      llmContent: `Successfully created technical plan '${planId}' (${version}) for specification '${this.params.specId}'. This is now the active plan. The plan includes architecture design (${this.params.architecture.components.length} components), implementation details (${this.params.implementation.files.length} files), ${this.params.risks.length} technical risks with mitigation strategies, and comprehensive testing strategy. Estimated duration: ${this.params.estimatedDuration}. Saved to ${planPath}`,
+      llmContent,
       returnDisplay: output,
     };
   }

@@ -1,0 +1,58 @@
+# Development Dockerfile for Fuxi CLI
+# This Dockerfile provides a development environment with all build tools
+# Code is mounted via volume, so compilation happens in container but outputs to local filesystem
+
+FROM docker.io/library/node:20-slim
+
+# Install build tools and development dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3 \
+  make \
+  g++ \
+  git \
+  curl \
+  dnsutils \
+  less \
+  jq \
+  bc \
+  unzip \
+  rsync \
+  ripgrep \
+  procps \
+  psmisc \
+  lsof \
+  ca-certificates \
+  vim \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+# Set up npm global package folder under /usr/local/share
+# Give it to non-root user node, already set up in base image
+RUN mkdir -p /usr/local/share/npm-global \
+  && chown -R node:node /usr/local/share/npm-global
+ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
+# Set working directory
+WORKDIR /workspace
+
+# Configure npm for better output in Docker
+# (progress=true shows installation progress, useful for debugging)
+ENV NPM_CONFIG_PROGRESS=true
+ENV NPM_CONFIG_LOGLEVEL=info
+
+# Proxy configuration (optional, can be overridden at runtime via -e flags)
+# Uncomment and set if you need proxy for npm install and build
+# ARG HTTP_PROXY
+# ARG HTTPS_PROXY
+# ARG NO_PROXY
+# ENV HTTP_PROXY=${HTTP_PROXY}
+# ENV HTTPS_PROXY=${HTTPS_PROXY}
+# ENV NO_PROXY=${NO_PROXY}
+
+# Switch to non-root user node
+USER node
+
+# Default command: keep container running for interactive use
+CMD ["tail", "-f", "/dev/null"]
+
