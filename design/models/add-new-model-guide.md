@@ -224,10 +224,17 @@ gemini --model qwen-coder-plus
   "options": {
     "temperature": 0.1,
     "completionEndpoint": "/chat/completions",
-    "responseFormat": "openai"
+    "responseFormat": "openai",
+    "requestBody": {
+      "thinking": {
+        "type": "enabled"
+      }
+    }
   }
 }
 ```
+
+- `requestBody`：将对象直接合并到请求体中，用于传递模型特定的扩展字段（例如智谱 `thinking`、供应商自定义开关等）。不会覆盖已存在的标准字段。
 
 ## 常见场景
 
@@ -280,9 +287,9 @@ gemini --model qwen-coder-plus
 
 ```json
 {
-  "glm-4": {
+  "glm-4.6": {
     "provider": "openai",
-    "model": "glm-4",
+    "model": "glm-4.6",
     "apiKey": "your-api-key",
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "metadata": {
@@ -290,12 +297,23 @@ gemini --model qwen-coder-plus
       "displayName": "智谱AI"
     },
     "capabilities": {
-      "maxOutputTokens": 8192,
-      "supportsFunctionCalling": true
+      "maxOutputTokens": 65536,
+      "supportsFunctionCalling": true,
+      "supportsMultimodal": true
+    },
+    "options": {
+      "completionEndpoint": "/chat/completions",
+      "requestBody": {
+        "thinking": {
+          "type": "enabled"
+        }
+      }
     }
   }
 }
 ```
+
+> 若需要启用智谱的“深度思考”能力，只需在 `options.requestBody` 中加入 `thinking` 字段即可，其余配置保持 OpenAI 兼容格式。
 
 #### 月之暗面 (Moonshot/Kimi)
 

@@ -159,7 +159,7 @@ export class AgentManager {
     const {
       name,
       title,
-      description = '',
+      description,
       model = 'gemini-2.0-flash',
       contextMode,
       scope = 'project',
@@ -169,6 +169,11 @@ export class AgentManager {
       denyTools = [],
       mcpServers = [],
     } = options;
+
+    // Validate description (required)
+    if (!description || description.trim().length === 0) {
+      throw new Error('Agent description is required');
+    }
 
     // Validate name (allow lowercase letters, numbers, hyphens, and underscores)
     if (!/^[a-z0-9_-]+$/.test(name)) {
@@ -257,7 +262,7 @@ export class AgentManager {
     title: string;
     description: string;
     model: string;
-    contextMode?: 'isolated' | 'shared';
+    contextMode?: 'isolated' | 'shared' | 'hybrid';
     scope: string;
     allowTools: string[];
     denyTools: string[];

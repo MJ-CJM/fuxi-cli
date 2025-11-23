@@ -79,6 +79,7 @@ export const useSlashCommandProcessor = (
     currentPlan: any;
     setCurrentPlan: (plan: any) => void;
     planModeActive: boolean;
+    setPlanModeActive: (active: boolean) => void;
     executionQueue: {
       active: boolean;
       mode: 'default' | 'auto_edit';
@@ -425,6 +426,7 @@ export const useSlashCommandProcessor = (
                   return {
                     type: 'submit_prompt',
                     content: result.content,
+                    agentOptions: result.agentOptions, // Pass through agent routing options
                   };
                 case 'confirm_shell_commands': {
                   const { outcome, approvedCommands } = await new Promise<{

@@ -8,7 +8,7 @@
 
 **文件**: `constitution.json`
 
-tiangong-cli 项目的完整宪章示例，包括：
+fuxi-cli 项目的完整宪章示例，包括：
 - 工程原则
 - 技术约束
 - 质量标准（测试、安全、性能）
@@ -268,4 +268,4 @@ cp design/spec-driven/examples/bug-*.json .gemini/specs/features/
 
 **文档版本**: 1.0.0  
 **创建日期**: 2025-01-19  
-**维护者**: tiangong-cli 开发团队
+**维护者**: fuxi-cli 开发团队

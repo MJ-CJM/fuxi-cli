@@ -138,6 +138,9 @@ export const AppContainer = (props: AppContainerProps) => {
   const [themeError, setThemeError] = useState<string | null>(
     initializationResult.themeError,
   );
+  const [configFilesMissingError] = useState<string | null>(
+    initializationResult.configFilesMissingError,
+  );
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
@@ -537,6 +540,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       currentPlan,
       setCurrentPlan,
       planModeActive,
+      setPlanModeActive,
       executionQueue,
       setExecutionQueue,
     },
@@ -981,6 +985,20 @@ Logging in with Google... Please restart Gemini CLI to continue.
         const newMode = !planModeActive;
         setPlanModeActive(newMode);
 
+        // Protection: when entering Plan mode, force DEFAULT approval and clear execution queue
+        if (newMode) {
+          try {
+            // Lazy import to avoid top-level dependency issues
+            (async () => {
+              const { ApprovalMode } = await import('@google/gemini-cli-core');
+              config.setApprovalMode(ApprovalMode.DEFAULT);
+            })();
+          } catch {}
+          if (executionQueue) {
+            setExecutionQueue(null);
+          }
+        }
+
         historyManager.addItem(
           {
             type: 'info',
@@ -1149,6 +1167,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       isAuthenticating,
       isConfigInitialized,
       authError,
+      configFilesMissingError,
       isAuthDialogOpen,
       editorError,
       isEditorDialogOpen,
@@ -1230,6 +1249,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
       isAuthenticating,
       isConfigInitialized,
       authError,
+      configFilesMissingError,
       isAuthDialogOpen,
       editorError,
       isEditorDialogOpen,

@@ -46,6 +46,10 @@ export class AgentParser {
       throw new Error(`Invalid agent file: ${filePath} - 'title' is required`);
     }
 
+    if (!frontMatter.description || frontMatter.description.trim().length === 0) {
+      throw new Error(`Invalid agent file: ${filePath} - 'description' is required`);
+    }
+
     // Extract system prompt from markdown body
     const systemPrompt = parsed.content.trim();
     if (!systemPrompt) {

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./images/logo.jpg" alt="天宫 CLI Logo" width="200"/>
+  <img src="./images/logo-fuxi.jpg" alt="伏羲 CLI Logo" width="600"/>
 </p>
 
 <p align="center">
@@ -9,10 +9,10 @@
   </strong>
 </p>
 
-# 天宫 CLI (tiangong-cli)
+# 伏羲 CLI (fuxi-cli)
 
 <p align="center">
-  <strong>基于 Gemini CLI 的增强版 AI 命令行工具</strong>
+  <strong>基于 Gemini CLI 的增强版 AI 命令行工具（前身是 tiangong-cli）</strong>
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@
 
 ## 📖 项目简介
 
-**天宫 CLI** 是基于 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) 开发的增强版本，专为国内开发者优化。在保留原有强大功能的基础上，提供了丰富的核心扩展功能：
+**伏羲 CLI** 是基于 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) 开发的增强版本，专为国内开发者优化。在保留原有强大功能的基础上，提供了丰富的核心扩展功能：
 
 ### 🎯 核心扩展功能
 
@@ -56,18 +56,21 @@
 
 ```bash
 # 全局安装
+npm install -g fuxi-cli
+
+# 原先的 tiangong-cli(已经暂停更新，请安装最新的 fuxi-cli)
 npm install -g tiangong-cli
 
 # 启动
-tiangong-cli
+fuxi-cli
 ```
 
 #### 方式二：源码安装
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chenjiamin/tiangong-cli.git
-cd tiangong-cli
+git clone https://github.com/chenjiamin/fuxi-cli.git
+cd fuxi-cli
 
 # 安装依赖
 npm install
@@ -79,12 +82,78 @@ npm run build
 npm start
 ```
 
+#### 方式三：Docker 开发环境
+
+**部署模式说明**：
+- **文件映射模式**（默认）：代码通过 volume 映射到容器，适合开发调试
+- **完整打包模式**：代码和依赖都打包到镜像，适合生产部署
+
+##### 文件映射模式（推荐用于开发）
+
+**说明**：代码通过 volume 映射到容器内，编译产物输出到本地。修改代码后无需重建镜像。
+
+```bash
+# 克隆仓库
+git clone https://github.com/chenjiamin/fuxi-cli.git
+cd fuxi-cli
+
+# 构建开发镜像（只包含编译工具，不包含代码）
+docker build -f Dockerfile.dev -t fuxi-cli-dev .
+
+# 删除本地 node_modules（如果存在，避免平台不匹配和符号链接冲突）
+rm -rf node_modules
+
+# 构建项目（代码通过 -v $(pwd):/workspace 映射到容器内）
+# 编译产物会直接输出到本地的 bundle/ 目录
+docker run --rm -v $(pwd):/workspace -w /workspace fuxi-cli-dev npm run build
+
+# 编译产物在本地 bundle/ 目录，可直接使用
+node bundle/fuxi-cli.js
+```
+
+**特点**：
+- 代码在本地，通过 `-v $(pwd):/workspace` 映射到容器
+- 修改代码后，重新运行构建命令即可，无需重建镜像
+- 编译产物在本地 `bundle/` 目录
+
+##### 完整打包模式（适合生产部署）
+
+**说明**：将代码和所有依赖都打包到镜像中，生成自包含镜像，无需挂载代码目录。
+
+```bash
+# 构建生产镜像（代码和依赖都打包到镜像中）
+docker build -f Dockerfile.prod -t fuxi-cli:latest .
+
+
+# 运行镜像（无需挂载代码目录，镜像已包含所有内容）
+docker run -it --rm fuxi-cli:latest
+
+# 挂载配置文件目录（如果需要读取 ~/.gemini/config.json）
+docker run -it --rm \
+  -v ~/.gemini:/home/node/.gemini \
+  fuxi-cli:latest
+
+# 或非交互式运行
+docker run --rm fuxi-cli:latest "你的问题"
+```
+
+**特点**：
+- 镜像自包含，代码和依赖都在镜像中
+- 无需挂载代码目录，可直接运行
+- 适合生产部署和镜像分发
+- 修改代码后需要重新构建镜像
+
+详细文档请参考：[Docker 开发环境指南](./docs/dev-docker.md)
+
 ### 系统要求
 
+**源码安装方式：**
 - Node.js 20.0.0 或更高版本
 - macOS、Linux 或 Windows
 
----
+**Docker 开发环境：**
+- Docker 20.10 或更高版本
+- macOS、Linux 或 Windows（需要 Docker Desktop）
 
 ## 🎯 核心功能
 
@@ -761,40 +830,44 @@ Constitution (宪章) → Specification (规格) → Technical Plan (技术方�
 
 ## 📋 常用命令
 
+### 基础功能
+
+```bash
+# 添加上下文：使用 @ 指定文件或文件夹
+@src/myFile.ts          # 添加单个文件到上下文
+@src/components/        # 添加整个文件夹到上下文
+
+# Shell 模式：执行 shell 命令
+!npm run start         # 使用 ! 前缀执行命令
+start server           # 或使用自然语言描述
+```
+
 ### 模型管理
 
 ```bash
-# 列出所有可用模型
+# 查看当前模型和提供商
+/model current
+
+# 列出所有可用模型（跨提供商）
 /model list
 
 # 切换模型
-/model use qwen-coder-plus
-
-# 查看当前模型
-/model info
+/model use <provider>:<model>    # 指定提供商和模型
+/model use <model>               # 使用默认提供商
+# 示例：
+/model use qwen3-coder-flash
+/model use openai:gpt-4
 ```
 
 ### Agent 管理
 
 ```bash
-# 列出所有 Agents
+# 列出所有可用 Agents
 /agents list
 
-# 创建 Agent（交互式，推荐）
-/agents create -i
-
-# 创建 Agent（命令行方式）
-/agents create <name> --title "标题" --model <模型名>
-
-# 创建 Agent（AI 生成内容）
-/agents create <name> --ai --purpose "Agent 用途描述"
-
-# 运行 Agent
-/agents run <name> <prompt>
-@<name> <prompt>
-
-# 查看 Agent 信息
-/agents info <name>
+# 创建 Agent
+/agents create <name> [options]           # 命令行方式创建
+/agents create --interactive              # 交互式创建（推荐）
 
 # 验证 Agent 配置
 /agents validate <name>
@@ -802,15 +875,32 @@ Constitution (宪章) → Specification (规格) → Technical Plan (技术方�
 # 删除 Agent
 /agents delete <name>
 
+# 查看 Agent 详情
+/agents info <name>
+
+# 运行 Agent
+/agents run [--context isolated|shared] <name> <prompt>
+# 或使用 @ 语法
+@<name> <prompt>
+
 # 清除 Agent 对话历史
 /agents clear <name>
+
+# 查看或管理 Agent 上下文
+/agents context <name>
+
+# 测试路由（显示哪个 Agent 会被选中）
+/agents route <prompt>
+
+# 查看或修改路由配置
+/agents config
 ```
 
 ### 路由配置
 
 ```bash
 # 查看路由配置
-/agents config show
+/agents config
 
 # 启用/禁用路由
 /agents config enable
@@ -819,96 +909,179 @@ Constitution (宪章) → Specification (规格) → Technical Plan (技术方�
 # 设置路由策略
 /agents config set strategy hybrid
 
-# 测试路由
+# 测试路由（不执行）
 /agents route "你的提示词"
+
+# 测试路由并执行
 /agents route "你的提示词" --execute
 ```
 
 ### Workflow 管理
 
 ```bash
-# 列出所有 Workflow
+# 列出所有可用 Workflow
 /workflow list
 
 # 查看 Workflow 详情
-/workflow info <workflow-name>
+/workflow info <name>
 
 # 执行 Workflow
-/workflow run <workflow-name> "<input>"
+/workflow run <name> <input>
 
 # 验证 Workflow 定义
-/workflow validate <workflow-name>
+/workflow validate <name>
 
 # 删除 Workflow
-/workflow delete <workflow-name>
+/workflow delete <name>
 ```
 
 ### Plan+Todo 管理
 
 ```bash
 # Plan 模式操作
-[Ctrl+P]              # 切换 Plan 模式
-/plan show            # 显示当前计划
-/plan to-todos        # 转换为 todos
-/plan clear           # 清除计划
+/plan create            # 创建新计划（激活 Plan 模式并提示 AI）
+/plan show              # 显示当前计划
+/plan to-todos          # 将当前计划转换为 todo 列表（存入内存）
+/plan clear             # 清除当前计划
+/plan quit              # 退出 Plan 模式
 
 # Todo 管理
-/todos list           # 列出所有 todos
-/todos execute <id> [--mode=auto_edit|default]  # 执行单个 todo
-/todos execute-all [--mode=auto_edit|default]   # 批量执行所有 todos
+/todos list             # 列出所有 todos
+/todos execute <id> [--mode=auto_edit|default] [--agent=<name>] [--no-routing]  # 执行单个 todo
+/todos execute-all [--mode=auto_edit|default] [--agent=<name>] [--no-routing]  # 批量执行所有待办
 /todos update <id> <status>  # 更新 todo 状态
-/todos export         # 导出为 JSON
-/todos clear          # 清除所有 todos
+/todos export           # 导出 todos 为 JSON 格式
+/todos clear            # 清除所有 todos
 ```
 
 ### Spec 规格驱动开发
 
 ```bash
 # Constitution 宪章管理
-/spec constitution --init  # 初始化项目宪章
-/spec constitution         # 显示当前宪章
+/spec constitution              # 显示当前宪章
+/spec constitution --init       # 创建新宪章
 
 # Specification 规格管理
-/spec new                  # 创建新规格（AI 引导）
-/spec list                 # 列出所有规格
-/spec show <spec-id>       # 显示规格详情
-/spec search <query>       # 搜索规格
-/spec filter category:feature  # 按类别过滤
-/spec delete <spec-id>     # 删除规格
-
-# Technical Plan 技术方案
-/spec plan new <spec-id>   # 生成技术方案
-/spec plan list <spec-id>  # 列出所有方案
-/spec plan show <plan-id>  # 显示方案详情
-/spec plan activate <plan-id>  # 激活方案
-
-# Task List 任务列表
-/spec tasks new <plan-id>  # 生成任务列表
-/spec tasks show <tasks-id>  # 显示任务详情
+/spec new                       # 创建新的业务规格（AI 引导）
+/spec list                      # 列出所有规格
+/spec show <id>                 # 显示规格详情
+/spec plan <subcommand>         # 管理技术方案
+/spec tasks <subcommand>        # 管理任务列表
+/spec delete <id> [--force]     # 删除规格
+/spec search <query>            # 搜索规格
+/spec filter category:<cat>     # 按类别过滤
+/spec filter status:<status>    # 按状态过滤
+/spec update <id>               # 使用 AI 引导更新规格
 
 # Execution 执行
-/spec execute start <tasks-id>  # 批量执行任务
-/spec execute status <tasks-id>  # 查看执行状态
+/spec execute <subcommand>      # 执行任务
+
+# Task 管理
+/spec task <subcommand>         # 管理单个任务
 ```
 
-### 通用命令
+### 对话管理
 
 ```bash
-# 查看帮助
-/help
-
-# 初始化项目上下文
-/init
-
-# 开始新对话
-/chat
-
-# 保存会话
-/save
-
-# 加载会话
-/load
+# 管理对话历史
+/chat list                      # 列出保存的对话检查点
+/chat save <tag>                # 将当前对话保存为检查点
+/chat resume <tag>              # 从检查点恢复对话
+/chat delete <tag>              # 删除对话检查点
+/chat share <file>              # 将当前对话分享为 markdown 或 json 文件
 ```
+
+### 工作区管理
+
+```bash
+# 管理工作区目录
+/directory add <paths>          # 添加目录到工作区（使用逗号分隔多个路径）
+/directory show                 # 显示工作区中的所有目录
+```
+
+### 扩展管理
+
+```bash
+# 管理扩展
+/extensions list                # 列出活动扩展
+/extensions update <extension-names>|--all  # 更新扩展
+```
+
+### MCP 管理
+
+```bash
+# MCP 服务器管理
+/mcp list                       # 列出已配置的 MCP 服务器和工具
+/mcp auth                       # 使用 OAuth 认证 MCP 服务器
+/mcp refresh                    # 重启 MCP 服务器
+```
+
+### 内存管理
+
+```bash
+# 内存命令
+/memory show                    # 显示当前内存内容
+/memory add                     # 添加内容到内存
+/memory refresh                 # 从源刷新内存
+/memory list                    # 列出正在使用的 GEMINI.md 文件路径
+```
+
+### 统计信息
+
+```bash
+# 查看会话统计
+/stats                          # 检查会话统计
+/stats model                    # 显示模型特定的使用统计
+/stats tools                    # 显示工具特定的使用统计
+```
+
+### 其他命令
+
+```bash
+# 基础命令
+/about                          # 显示版本信息
+/auth                           # 更改认证方法
+/bug                            # 提交 Bug 报告
+/clear                          # 清除屏幕和对话历史
+/compress                       # 通过摘要替换上下文来压缩上下文
+/copy                           # 复制最后的结果或代码片段到剪贴板
+/docs                           # 在浏览器中打开完整的 Gemini CLI 文档
+/editor                         # 设置外部编辑器偏好
+/help                           # 获取帮助信息
+/ide                            # 管理 IDE 集成
+/init                           # 分析项目并创建定制的 GEMINI.md 文件
+/privacy                        # 显示隐私声明
+/quit                           # 退出 CLI
+/theme                          # 更改主题
+/tools [desc]                   # 列出可用的 Gemini CLI 工具
+/settings                       # 查看和编辑 Gemini CLI 设置
+/vim                            # 切换 vim 模式开/关
+/setup-github                   # 设置 GitHub Actions
+/terminal-setup                 # 配置终端按键绑定以支持多行输入（VS Code、Cursor、Windsurf）
+
+# Shell 命令
+!<command>                       # 执行 shell 命令
+
+# MCP 命令
+[MCP]                           # Model Context Protocol 命令（来自外部服务器）
+```
+
+### 键盘快捷键
+
+```bash
+Alt+Left/Right                  # 在输入中跳转单词
+Ctrl+C                          # 退出应用
+Ctrl+J                          # 新行
+Ctrl+L                          # 清除屏幕
+Ctrl+X / Meta+Enter             # 在外部编辑器中打开输入
+Ctrl+Y                          # 切换 YOLO 模式
+Enter                           # 发送消息
+Esc                             # 取消操作 / 清除输入（双击）
+Shift+Tab                       # 切换自动接受编辑
+Up/Down                         # 循环浏览提示历史记录
+```
+
+📚 **完整快捷键列表**：详见 [键盘快捷键文档](./docs/cli/keyboard-shortcuts.md)
 
 ---
 
@@ -1243,11 +1416,11 @@ export GEMINI_ROUTING_CONFIDENCE_THRESHOLD=75
 
 ### 技术基础
 
-天宫 CLI 基于 Google Gemini CLI 开发，完全兼容原有功能。我们在保留其强大能力的同时，针对国内开发者的需求进行了以下扩展：
+伏羲 CLI 基于 Google Gemini CLI 开发，完全兼容原有功能。我们在保留其强大能力的同时，针对国内开发者的需求进行了以下扩展：
 
 ### 主要扩展
 
-| 扩展功能 | 原 Gemini CLI | 天宫 CLI |
+| 扩展功能 | 原 Gemini CLI | 伏羲 CLI |
 |---------|--------------|---------|
 | 自定义模型配置 | ❌ 仅支持 Gemini/OpenAI/Claude | ✅ 支持任意 OpenAI 兼容模型 |
 | 国内模型支持 | ❌ 无 | ✅ 通义千问、DeepSeek 等开箱即用 |
@@ -1289,16 +1462,16 @@ export GEMINI_ROUTING_CONFIDENCE_THRESHOLD=75
 
 ### 问题反馈
 
-- 🐛 [提交 Bug](https://github.com/MJ-CJM/tiangong-cli/issues/new?labels=bug)
-- 💡 [功能建议](https://github.com/MJ-CJM/tiangong-cli/issues/new?labels=enhancement)
-- ❓ [问题讨论](https://github.com/MJ-CJM/tiangong-cli/discussions)
+- 🐛 [提交 Bug](https://github.com/MJ-CJM/fuxi-cli/issues/new?labels=bug)
+- 💡 [功能建议](https://github.com/MJ-CJM/fuxi-cli/issues/new?labels=enhancement)
+- ❓ [问题讨论](https://github.com/MJ-CJM/fuxi-cli/discussions)
 
 ### 开发指南
 
 ```bash
 # 克隆仓库
-git clone https://github.com/MJ-CJM/tiangong-cli/tiangong-cli.git
-cd tiangong-cli
+git clone https://github.com/MJ-CJM/fuxi-cli/fuxi-cli.git
+cd fuxi-cli
 
 # 安装依赖
 npm install
@@ -1334,7 +1507,7 @@ npm start
 ---
 
 <p align="center">
-  <strong>天宫 CLI - 让 AI 开发更高效 🚀</strong>
+  <strong>伏羲 CLI - 让 AI 开发更高效 🚀</strong>
 </p>
 
 <p align="center">

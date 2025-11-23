@@ -15,6 +15,30 @@ import {
 } from './types.js';
 
 /**
+ * Format tool arguments for display in the UI
+ */
+function formatToolArgs(toolName: string, args: Record<string, any>): string {
+  // For common tools, format the arguments in a readable way
+  const formatters: Record<string, (args: Record<string, any>) => string> = {
+    read_file: (args) => `Read: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    write_file: (args) => `Write: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    replace: (args) => `Edit: ${args['absolute_path'] || args['file_path'] || args['path'] || 'unknown'}`,
+    bash: (args) => `Run: ${args['command'] || 'unknown'}`,
+    glob: (args) => `Search: ${args['pattern'] || 'unknown'}`,
+    grep: (args) => `Grep: ${args['pattern'] || 'unknown'}`,
+  };
+
+  const formatter = formatters[toolName];
+  if (formatter) {
+    return formatter(args);
+  }
+
+  // Default: show tool name with argument count
+  const argCount = Object.keys(args).length;
+  return `${toolName} (${argCount} arg${argCount !== 1 ? 's' : ''})`;
+}
+
+/**
  * Get AgentManager from config's AgentExecutor
  */
 async function getAgentManager(context: CommandContext) {
@@ -275,9 +299,11 @@ ${'━'.repeat(70)}
                 break;
 
               case CreationStep.DESCRIPTION:
-                if (input) {
-                  session.setDescription(input);
+                if (input && input.trim().length > 0) {
+                  session.setDescription(input.trim());
                 } else {
+                  // Allow skipping description in interactive mode
+                  // It will be filled from purpose in AI mode or required in manual mode
                   session.skipDescription();
                   skipToNext = true;
                 }
@@ -315,8 +341,10 @@ ${'━'.repeat(70)}
                     session.setContextMode('isolated');
                   } else if (contextModeInput === '2' || contextModeInput === 'shared') {
                     session.setContextMode('shared');
+                  } else if (contextModeInput === '3' || contextModeInput === 'hybrid') {
+                    session.setContextMode('hybrid');
                   } else {
-                    error = 'Please enter 1/isolated (Isolated) or 2/shared (Shared), or press Enter for default.';
+                    error = 'Please enter 1/isolated, 2/shared, or 3/hybrid, or press Enter for default.';
                   }
                 }
                 break;
@@ -333,12 +361,15 @@ ${'━'.repeat(70)}
                 break;
 
               case CreationStep.PURPOSE:
-                if (!input) {
+                if (!input || input.trim().length === 0) {
                   error = 'Purpose description is required for AI generation.';
-                } else if (input.length < 10) {
-                  error = 'Purpose description is too short. Please provide more detail (at least 10 characters).';
                 } else {
                   session.setPurpose(input);
+                  // If description was not provided earlier, use purpose as description
+                  const currentState = session.getState();
+                  if (!currentState.description || currentState.description.trim().length === 0) {
+                    session.updateDescription(input.trim());
+                  }
 
                   // Generate AI content immediately
                   if (state.contentMethod === 'ai' && context.services.config) {
@@ -373,7 +404,9 @@ ${'─'.repeat(70)}
 📊 **Content Summary:**
   - Role: ${generated.role.substring(0, 60)}${generated.role.length > 60 ? '...' : ''}
   - Responsibilities: ${generated.responsibilities.length} items
+  - Workflow: ${generated.workflow.length} steps
   - Guidelines: ${generated.guidelines.length} items
+  - Examples: ${generated.examples.length} scenarios
   - Constraints: ${generated.constraints.length} items
 `,
                         },
@@ -418,6 +451,13 @@ ${'─'.repeat(70)}
                   // Create the agent
                   try {
                     const finalState = session.getState();
+
+                    // Validate description is present
+                    if (!finalState.description || finalState.description.trim().length === 0) {
+                      error = 'Agent description is required but missing. This should not happen.';
+                      break;
+                    }
+
                     const agentManager = await getAgentManager(context);
 
                     await agentManager.createAgent({
@@ -667,7 +707,7 @@ ${'━'.repeat(70)}
 **Options:**
   --interactive, -i        Start interactive step-by-step creation ⭐
   --title "Title"          Display title (default: auto-generated from name)
-  --description "text"     Short description (optional)
+  --description "text"     Short description (optional, defaults to purpose in AI mode)
   --model model-name       AI model to use (default: first configured model)
   --scope project|global   Where to save (default: project)
   --ai                     Use AI to generate agent content ⭐
@@ -802,12 +842,15 @@ ${modelList}
           }
 
           // Show configuration summary
+          // For AI mode without explicit description, use purpose as description
+          const displayDescription = description || (useAI && purpose ? purpose : '(none)');
+
           const configSummary = `📋 **Agent Configuration**
 
 ┌────────────────────────────────────────────┐
 │ Name:        ${name.padEnd(28)}│
 │ Title:       ${title.padEnd(28)}│
-│ Description: ${(description || '(none)').substring(0, 28).padEnd(28)}│
+│ Description: ${displayDescription.substring(0, 28).padEnd(28)}│
 │ Scope:       ${scope.padEnd(28)}│
 │ Model:       ${model.padEnd(28)}│
 │ Mode:        ${(useAI ? 'AI Generated' : 'Manual Template').padEnd(28)}│
@@ -856,7 +899,9 @@ ${'─'.repeat(70)}
 📊 **Content Summary:**
   - Role: ${generated.role.substring(0, 60)}${generated.role.length > 60 ? '...' : ''}
   - Responsibilities: ${generated.responsibilities.length} items
+  - Workflow: ${generated.workflow.length} steps
   - Guidelines: ${generated.guidelines.length} items
+  - Examples: ${generated.examples.length} scenarios
   - Constraints: ${generated.constraints.length} items`,
                 },
                 Date.now()
@@ -912,11 +957,14 @@ ${'━'.repeat(70)}`,
           }
 
           // Actually create the agent
+          // If using AI and no description provided, use purpose as description
+          const finalDescription = description || (useAI && purpose ? purpose : undefined);
+
           const agentManager = await getAgentManager(context);
           const agent = await agentManager.createAgent({
             name,
             title,
-            description,
+            description: finalDescription!,
             model,
             contextMode: undefined, // Single command mode doesn't specify contextMode
             scope,
@@ -1202,21 +1250,21 @@ ${useAI ? `💡 **Tip:**
           }
 
           // Parse context mode parameter if present
-          let contextMode: 'isolated' | 'shared' | undefined;
+          let contextMode: 'isolated' | 'shared' | 'hybrid' | undefined;
           let trimmed = args.trim();
 
           if (trimmed.startsWith('--context ')) {
             const parts = trimmed.substring(10).split(' ');
             const modeValue = parts[0];
 
-            if (modeValue === 'isolated' || modeValue === 'shared') {
+            if (modeValue === 'isolated' || modeValue === 'shared' || modeValue === 'hybrid') {
               contextMode = modeValue;
               trimmed = parts.slice(1).join(' ').trim();
             } else {
               context.ui.addItem(
                 {
                   type: MessageType.ERROR,
-                  text: `Invalid context mode: ${modeValue}. Must be 'isolated' or 'shared'.`,
+                  text: `Invalid context mode: ${modeValue}. Must be 'isolated', 'shared', or 'hybrid'.`,
                 },
                 Date.now()
               );
@@ -1317,11 +1365,14 @@ ${useAI ? `💡 **Tip:**
             },
             // Callback when tool is called
             onToolCall: (toolName: string, args: any) => {
-              // Create a tool display similar to workflow and main session
+              // Format tool arguments for display
+              const argsDisplay = formatToolArgs(toolName, args);
+
+              // Create a tool display with detailed description
               const toolDisplay: IndividualToolCallDisplay = {
                 callId: `agent-${agentName}-${toolName}-${Date.now()}`,
                 name: toolName,
-                description: toolName,
+                description: argsDisplay,
                 status: ToolCallStatus.Success,
                 resultDisplay: undefined,
                 confirmationDetails: undefined,
@@ -1358,6 +1409,75 @@ ${useAI ? `💡 **Tip:**
             },
             Date.now()
           );
+
+          // Sync hybrid mode summary back to main session
+          // Check if agent uses hybrid mode
+          try {
+            const actualContextMode = result.metadata?.contextMode || agent.contextMode;
+
+            // console.error(`[HybridMode] Checking sync conditions (agents run):`, {
+            //   agentName,
+            //   actualContextMode,
+            //   metadataContextMode: result.metadata?.contextMode,
+            //   agentDefContextMode: agent.contextMode
+            // });
+
+            if (actualContextMode === 'hybrid') {
+              // console.error('[HybridMode] Syncing to geminiClient (user question + agent summary)');
+
+              // Get geminiClient
+              const geminiClient = context.services.config.getGeminiClient();
+              if (!geminiClient) {
+                // console.error(`[HybridMode] ⚠️ geminiClient not available, cannot sync`);
+              } else {
+                // STEP 1: Add user's original question to main history
+                const userQuestion = {
+                  role: 'user' as const,
+                  parts: [{ text: prompt }],
+                };
+                await geminiClient.addHistory(userQuestion);
+                // console.error(`[HybridMode] ✅ Added user question to geminiClient: "${prompt.substring(0, 50)}..."`);
+
+                // STEP 2: Add agent's hybrid summary to main history
+                const contextManager = executor.getContextManager();
+                const mainContext = contextManager.getMainSessionContext();
+
+                // console.error(`[HybridMode] Main context has ${mainContext.length} messages`);
+
+                // Get the last message (the hybrid summary we just added)
+                const lastMessage = mainContext[mainContext.length - 1];
+                if (lastMessage && lastMessage.metadata?.['source'] === 'hybrid_agent') {
+                  // Convert UnifiedMessage to Gemini Content format
+                  const textParts = lastMessage.content
+                    .filter(part => part.type === 'text')
+                    .map(part => ({ text: part.text || '' }));
+
+                  const geminiContent = {
+                    role: lastMessage.role === 'user' ? 'user' : 'model',
+                    parts: textParts,
+                  };
+
+                  await geminiClient.addHistory(geminiContent);
+                  // console.error(`[HybridMode] ✅ Successfully synced hybrid summary to geminiClient (agent: ${lastMessage.metadata?.['agentName']})`);
+
+                  // DEBUG: Print complete main session history after sync
+                  // try {
+                  //   const completeHistory = await geminiClient.getHistory();
+                  //   console.error(`[HybridMode] 📋 Complete main session history (${completeHistory.length} messages):`);
+                  //   console.error(JSON.stringify(completeHistory, null, 2));
+                  // } catch (err) {
+                  //   console.error('[HybridMode] Failed to get complete history:', err);
+                  // }
+                } else {
+                  // console.error(`[HybridMode] ⚠️ Last message is not a hybrid summary, skipping sync`);
+                }
+              }
+            } else {
+              // console.error(`[HybridMode] Context mode is ${actualContextMode}, not hybrid - skipping sync`);
+            }
+          } catch (error) {
+            // console.error('[HybridMode] ❌ Failed to sync summary to geminiClient:', error);
+          }
 
           // Show usage stats if available
           if (result.metadata?.tokensUsed) {

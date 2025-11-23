@@ -28,6 +28,11 @@ export const specCommand: SlashCommand = {
       action: async (context: CommandContext, args: string) => {
         const specManager = new SpecManager(context.services.config!);
 
+        // Parse agent-related flags
+        const agentMatch = args?.match(/--agent[=\s]+(\S+)/);
+        const agent = agentMatch ? agentMatch[1] : undefined;
+        const noRouting = args?.includes('--no-routing') || false;
+
         // Check if --init flag is provided
         if (args && args.includes('--init')) {
           // Initialize new constitution
@@ -75,6 +80,7 @@ export const specCommand: SlashCommand = {
               '5. Any security requirements?\n' +
               '6. Performance goals?\n' +
               '7. Architecture preferences?',
+            agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
           };
         }
 
@@ -158,7 +164,12 @@ export const specCommand: SlashCommand = {
       name: 'new',
       description: 'Create a new business specification with AI guidance',
       kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext) => {
+      action: async (context: CommandContext, args?: string) => {
+        // Parse agent-related flags
+        const agentMatch = args?.match(/--agent[=\s]+(\S+)/);
+        const agent = agentMatch ? agentMatch[1] : undefined;
+        const noRouting = args?.includes('--no-routing') || false;
+
         context.ui.addItem(
           {
             type: MessageType.INFO,
@@ -186,6 +197,7 @@ export const specCommand: SlashCommand = {
             '5. Any business constraints? (budget, timeline, compliance)\n' +
             '6. Priority level (1-5)?\n' +
             '7. Business value (1-10)?',
+          agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
         };
       },
     },
@@ -396,7 +408,13 @@ export const specCommand: SlashCommand = {
               return;
             }
 
-            const specId = args.trim();
+            // Parse spec-id and agent flags
+            const agentMatch = args.match(/--agent[=\s]+(\S+)/);
+            const agent = agentMatch ? agentMatch[1] : undefined;
+            const noRouting = args.includes('--no-routing');
+
+            // Extract spec-id (remove flags)
+            const specId = args.replace(/--agent[=\s]+\S+/g, '').replace(/--no-routing/g, '').trim();
             const specManager = new SpecManager(context.services.config!);
 
             // Verify spec exists
@@ -469,6 +487,7 @@ export const specCommand: SlashCommand = {
                 `- testingStrategy: { unit, integration, e2e, coverage }\n` +
                 `- estimatedDuration: Time estimate (e.g., "5 days", "2 weeks")\n\n` +
                 `Generate a comprehensive technical design based on the business specification above.`,
+              agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
             };
           },
         },
@@ -863,7 +882,13 @@ export const specCommand: SlashCommand = {
               return;
             }
 
-            const planId = args.trim();
+            // Parse plan-id and agent flags
+            const agentMatch = args.match(/--agent[=\s]+(\S+)/);
+            const agent = agentMatch ? agentMatch[1] : undefined;
+            const noRouting = args.includes('--no-routing');
+
+            // Extract plan-id (remove flags)
+            const planId = args.replace(/--agent[=\s]+\S+/g, '').replace(/--no-routing/g, '').trim();
             const specManager = new SpecManager(context.services.config!);
 
             // Verify plan exists
@@ -916,6 +941,7 @@ export const specCommand: SlashCommand = {
                 (existingTaskLists.length > 0 ? `Note: This plan already has ${existingTaskLists.length} task list(s). Consider providing a different breakdown or granularity level.\n\n` : '') +
                 `Use the spec_to_tasks tool to break this down into concrete, actionable tasks. ` +
                 `Include planId='${planId}', task dependencies, effort estimates, and file references for each task.`,
+              agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
             };
           },
         },
@@ -1593,7 +1619,13 @@ export const specCommand: SlashCommand = {
               return;
             }
 
-            const tasksId = args.trim();
+            // Parse tasks-id and agent flags
+            const agentMatch = args.match(/--agent[=\s]+(\S+)/);
+            const agent = agentMatch ? agentMatch[1] : undefined;
+            const noRouting = args.includes('--no-routing');
+
+            // Extract tasks-id (remove flags)
+            const tasksId = args.replace(/--agent[=\s]+\S+/g, '').replace(/--no-routing/g, '').trim();
             const specManager = new SpecManager(context.services.config!);
             const taskList = specManager.getTaskListById(tasksId);
 
@@ -1664,6 +1696,7 @@ export const specCommand: SlashCommand = {
                   `- Do NOT stop after each task\n` +
                   `- Do NOT ask for permission to continue\n` +
                   `- This is a BATCH execution - complete all tasks in one go`,
+                agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
               };
             } catch (error) {
               context.ui.addItem(
@@ -1684,7 +1717,14 @@ export const specCommand: SlashCommand = {
           description: 'Execute a specific task: /spec execute task <tasks-id> <task-id>',
           kind: CommandKind.BUILT_IN,
           action: async (context: CommandContext, args: string) => {
-            const parts = args.trim().split(/\s+/);
+            // Parse agent flags
+            const agentMatch = args.match(/--agent[=\s]+(\S+)/);
+            const agent = agentMatch ? agentMatch[1] : undefined;
+            const noRouting = args.includes('--no-routing');
+
+            // Remove flags and split to get tasks-id and task-id
+            const cleanArgs = args.replace(/--agent[=\s]+\S+/g, '').replace(/--no-routing/g, '').trim();
+            const parts = cleanArgs.split(/\s+/);
             if (parts.length < 2) {
               context.ui.addItem(
                 {
@@ -1750,6 +1790,7 @@ export const specCommand: SlashCommand = {
                 `- tasksId: "${tasksId}" (REQUIRED - the task list ID, NOT taskListId)\n` +
                 `- status: "completed" (or "blocked" if errors occurred)\n` +
                 `- notes: (optional) Any execution notes`,
+              agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
             };
           },
         },

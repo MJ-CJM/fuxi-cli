@@ -13,6 +13,7 @@ import {
   type ToolResult,
 } from './tools.js';
 import { SpecManager } from '../spec/SpecManager.js';
+import { formatConstitutionForAI } from '../spec/ConstitutionFormatter.js';
 
 /**
  * Parameters for the execute_task tool
@@ -58,6 +59,9 @@ class ExecuteTaskToolInvocation extends BaseToolInvocation<
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const specManager = new SpecManager(this.config);
+
+    // Load constitution for context
+    const constitution = specManager.loadConstitution();
 
     // Get task list
     const taskList = specManager.getTaskListById(this.params.tasksId);
@@ -147,8 +151,15 @@ class ExecuteTaskToolInvocation extends BaseToolInvocation<
     const attempts = (task.execution?.attempts || 0) + 1;
     output += `*Execution attempt #${attempts}*\n`;
 
+    // Build llmContent with Constitution context if available
+    let llmContent = '';
+    if (constitution) {
+      llmContent += formatConstitutionForAI(constitution) + '\n\n';
+    }
+    llmContent += `Started executing task '${this.params.taskId}': ${task.title}. Task type: ${task.type}, priority: ${task.priority}. Files to modify: ${task.files.join(', ')}. This is execution attempt #${attempts}. After completing the implementation, IMMEDIATELY update the task status using update_task_status tool with status='completed' (or 'blocked' if errors). Then check for the next pending task and execute it automatically if in batch mode.`;
+
     return {
-      llmContent: `Started executing task '${this.params.taskId}': ${task.title}. Task type: ${task.type}, priority: ${task.priority}. Files to modify: ${task.files.join(', ')}. This is execution attempt #${attempts}. After completing the implementation, IMMEDIATELY update the task status using update_task_status tool with status='completed' (or 'blocked' if errors). Then check for the next pending task and execute it automatically if in batch mode.`,
+      llmContent,
       returnDisplay: output,
     };
   }

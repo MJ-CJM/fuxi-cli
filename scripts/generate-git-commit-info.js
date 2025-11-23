@@ -18,10 +18,9 @@
 // limitations under the License.
 
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readPackageUp } from 'read-package-up';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -44,15 +43,25 @@ if (!existsSync(generatedCoreDir)) {
 try {
   const gitHash = execSync('git rev-parse --short HEAD', {
     encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 5000, // 5 second timeout to avoid hanging
   }).trim();
   if (gitHash) {
     gitCommitInfo = gitHash;
   }
-
-  const result = await readPackageUp();
-  cliVersion = result?.packageJson?.version ?? 'UNKNOWN';
 } catch {
-  // ignore
+  // ignore git errors (e.g., if .git directory is not available in Docker)
+}
+
+try {
+  // Read package.json directly instead of using readPackageUp to avoid async issues
+  const packageJsonPath = join(root, 'package.json');
+  if (existsSync(packageJsonPath)) {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    cliVersion = packageJson.version ?? 'UNKNOWN';
+  }
+} catch {
+  // ignore package read errors
 }
 
 const fileContent = `/**

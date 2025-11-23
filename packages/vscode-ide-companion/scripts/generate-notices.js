@@ -117,11 +117,26 @@ async function main() {
     const packageJson = JSON.parse(packageJsonContent);
 
     const packageLockJsonPath = path.join(projectRoot, 'package-lock.json');
-    const packageLockJsonContent = await fs.readFile(
-      packageLockJsonPath,
-      'utf-8',
-    );
-    const packageLockJson = JSON.parse(packageLockJsonContent);
+    
+    // Check if package-lock.json exists (it may not exist during npm install prepare phase)
+    let packageLockJson;
+    try {
+      const packageLockJsonContent = await fs.readFile(
+        packageLockJsonPath,
+        'utf-8',
+      );
+      packageLockJson = JSON.parse(packageLockJsonContent);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // package-lock.json doesn't exist yet (during npm install prepare phase)
+        // Skip generating NOTICES.txt for now, it will be generated during build
+        console.log(
+          'Skipping NOTICES.txt generation: package-lock.json not found (this is normal during npm install)',
+        );
+        return;
+      }
+      throw error;
+    }
 
     const allDependencies = new Map();
     const directDependencies = Object.keys(packageJson.dependencies);

@@ -100,12 +100,12 @@ export function parseModelString(modelString: string): { provider?: ModelProvide
 export function getModelConfig(modelString: string, customConfigs?: Record<string, ModelConfig>): ModelConfig {
   const { provider, model } = parseModelString(modelString);
 
-  // Check custom configurations first
+  // Priority 1: Check custom configurations by exact key match
   if (customConfigs?.[modelString]) {
     return customConfigs[modelString];
   }
 
-  // Check predefined configurations
+  // Priority 2: Check predefined configurations by exact match
   if (DEFAULT_MODEL_CONFIGS[modelString]) {
     return DEFAULT_MODEL_CONFIGS[modelString];
   }
@@ -114,7 +114,7 @@ export function getModelConfig(modelString: string, customConfigs?: Record<strin
     return DEFAULT_MODEL_CONFIGS[model];
   }
 
-  // If provider is specified, create a config
+  // Priority 3: If provider is explicitly specified (format "provider:model"), create config
   if (provider) {
     return {
       provider,
@@ -123,8 +123,33 @@ export function getModelConfig(modelString: string, customConfigs?: Record<strin
     };
   }
 
-  // For unknown models, try to detect provider or default to custom
-  // If model contains known provider patterns, use custom provider
+  // Priority 4: FALLBACK - Check if modelString matches any custom config's model field
+  // This handles the case where config key (e.g., "qwen-coder-plus2") differs from
+  // the actual model name (e.g., "qwen-coder-plus")
+  // WARNING: If multiple keys map to the same model, this returns the first match!
+  if (customConfigs) {
+    const matchingConfigs: Array<{ key: string; config: ModelConfig }> = [];
+
+    for (const [key, config] of Object.entries(customConfigs)) {
+      if (config.model === modelString) {
+        matchingConfigs.push({ key, config });
+      }
+    }
+
+    if (matchingConfigs.length > 0) {
+      if (matchingConfigs.length > 1) {
+        console.warn(
+          `WARNING: Multiple configuration keys map to model "${modelString}": ${matchingConfigs.map(m => m.key).join(', ')}. ` +
+          `Using first match "${matchingConfigs[0].key}". ` +
+          `To avoid ambiguity, use the specific config key (e.g., /model use ${matchingConfigs[0].key}) instead of the model name.`
+        );
+      }
+      console.log(`Found custom configuration for model "${modelString}" under key "${matchingConfigs[0].key}"`);
+      return matchingConfigs[0].config;
+    }
+  }
+
+  // Priority 5: Pattern-based detection for known providers (fallback for unconfigured models)
   if (modelString.includes('qwen') || modelString.includes('coder') || modelString.includes('flash')) {
     const config = {
       provider: 'custom' as ModelProvider,
@@ -135,7 +160,7 @@ export function getModelConfig(modelString: string, customConfigs?: Record<strin
     return config;
   }
 
-  // Default to Gemini for unknown models (backward compatibility)
+  // Priority 6: Default to Gemini for unknown models (backward compatibility)
   const config = {
     provider: 'gemini' as ModelProvider,
     model: modelString,
@@ -171,44 +196,8 @@ export function getEffectiveModel(
  * Get fallback configurations for a given model
  */
 export function getFallbackConfigs(modelConfig: ModelConfig): ModelConfig[] {
-  const fallbacks: ModelConfig[] = [];
-
-  // Provider-specific fallbacks
-  switch (modelConfig.provider) {
-    case 'gemini':
-      if (modelConfig.model !== DEFAULT_GEMINI_FLASH_MODEL) {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS[DEFAULT_GEMINI_FLASH_MODEL]);
-      }
-      break;
-
-    case 'openai':
-      if (modelConfig.model !== 'gpt-4o-mini') {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS['gpt-4o-mini']);
-      }
-      break;
-
-    case 'claude':
-      if (modelConfig.model !== 'claude-3-5-haiku-20241022') {
-        fallbacks.push(DEFAULT_MODEL_CONFIGS['claude-3-5-haiku']);
-      }
-      break;
-
-    case 'qwen':
-    case 'deepseek':
-      // For Qwen/DeepSeek, no specific fallback within the same provider
-      // They will fall back to cross-provider options below
-      break;
-  }
-
-  // Cross-provider fallback: try another ModelRouter-compatible model
-  // Note: We don't add Gemini as a fallback because it doesn't have a ModelRouter adapter
-  // Gemini uses the traditional implementation path (geminiChat.ts), not ModelRouter
-  if (modelConfig.provider !== 'openai') {
-    // Fallback to OpenAI gpt-4o-mini if available
-    fallbacks.push(DEFAULT_MODEL_CONFIGS['gpt-4o-mini']);
-  }
-
-  return fallbacks;
+  // Disable automatic fallbacks—if the primary model fails, surface the error directly.
+  return [];
 }
 
 /**

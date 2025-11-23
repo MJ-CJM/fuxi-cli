@@ -23,8 +23,8 @@ export interface TiangongAgentDefinition {
   /** Human-readable title */
   title: string;
 
-  /** Optional description */
-  description?: string;
+  /** Description (required) */
+  description: string;
 
   /** Model to use (defaults to system model) */
   model?: string;
@@ -38,8 +38,8 @@ export interface TiangongAgentDefinition {
   /** Version string */
   version?: string;
 
-  /** Context mode: isolated (default) or shared */
-  contextMode?: 'isolated' | 'shared';
+  /** Context mode: isolated (default), shared, or hybrid */
+  contextMode?: 'isolated' | 'shared' | 'hybrid';
 
   /** Tool access control */
   tools?: {
@@ -142,6 +142,26 @@ export interface AgentValidationResult {
 }
 
 /**
+ * Hybrid context mode options
+ */
+export interface HybridContextOptions {
+  /** Include summary in main session (default: true) */
+  includeSummary?: boolean;
+
+  /** Include tool calls list in summary (default: false) */
+  includeToolCalls?: boolean;
+
+  /** Include errors in summary (default: true) */
+  includeErrors?: boolean;
+
+  /** Include execution metadata (duration, iterations) in summary (default: true) */
+  includeMetadata?: boolean;
+
+  /** Custom summary formatter function */
+  customSummary?: (response: AgentExecuteResponse) => string;
+}
+
+/**
  * Agent execution options
  */
 export interface AgentExecuteOptions {
@@ -158,7 +178,10 @@ export interface AgentExecuteOptions {
   interactive?: boolean;
 
   /** Force context mode (overrides agent definition) */
-  contextMode?: 'isolated' | 'shared';
+  contextMode?: 'isolated' | 'shared' | 'hybrid';
+
+  /** Hybrid mode options (only used when contextMode is 'hybrid') */
+  hybridOptions?: HybridContextOptions;
 
   /** Callback when a tool is about to be called */
   onToolCall?: (toolName: string, args: any) => void;
@@ -201,7 +224,13 @@ export interface AgentExecuteResponse {
     /** Number of iterations (tool calling rounds) */
     iterations?: number;
     /** Context mode used */
-    contextMode?: 'isolated' | 'shared';
+    contextMode?: 'isolated' | 'shared' | 'hybrid';
+    /** Tool calls tracking (for hybrid mode) */
+    toolCallsTracking?: Array<{
+      name: string;
+      success: boolean;
+      error?: string;
+    }>;
   };
 }
 
@@ -215,14 +244,14 @@ export interface AgentCreateOptions {
   /** Human-readable title */
   title: string;
 
-  /** Description */
-  description?: string;
+  /** Description (required) */
+  description: string;
 
   /** Model to use */
   model?: string;
 
   /** Context mode */
-  contextMode?: 'isolated' | 'shared';
+  contextMode?: 'isolated' | 'shared' | 'hybrid';
 
   /** Scope (global or project) */
   scope?: 'global' | 'project';
@@ -263,12 +292,12 @@ export interface AgentFrontMatter {
   kind: 'agent';
   name: string;
   title: string;
-  description?: string;
+  description: string;
   model?: string;
   color?: string;
   scope?: 'global' | 'project';
   version?: string;
-  contextMode?: 'isolated' | 'shared';
+  contextMode?: 'isolated' | 'shared' | 'hybrid';
   tools?: {
     allow?: string[];
     deny?: string[];

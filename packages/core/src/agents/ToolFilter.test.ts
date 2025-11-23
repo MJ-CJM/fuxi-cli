@@ -16,6 +16,7 @@ describe('ToolFilter', () => {
     kind: 'agent',
     name: 'test',
     title: 'Test',
+    description: 'Test agent for tool filtering',
     systemPrompt: 'test',
     filePath: '/test.md',
     tools,

@@ -16,7 +16,7 @@ import type { UnifiedMessage } from '../adapters/base/types.js';
  */
 export class ContextManager {
   private contexts: Map<string, AgentContext> = new Map();
-  private mainSessionContext: UnifiedMessage[] | null = null;
+  private mainSessionContext: UnifiedMessage[] = []; // Initialize as empty array, not null
 
   /**
    * Set main session context (for shared mode)
@@ -33,7 +33,7 @@ export class ContextManager {
    * @returns Main session conversation history
    */
   getMainSessionContext(): UnifiedMessage[] {
-    return this.mainSessionContext || [];
+    return this.mainSessionContext; // Now guaranteed to be an array
   }
 
   /**
@@ -85,7 +85,7 @@ export class ContextManager {
     if (!sharedContext) {
       sharedContext = {
         agentName,
-        conversationHistory: this.mainSessionContext || [],
+        conversationHistory: this.mainSessionContext, // Direct reference, no need for || []
         metadata: { mode: 'shared' },
         createdAt: new Date(),
         lastAccessedAt: new Date(),
@@ -93,7 +93,7 @@ export class ContextManager {
       this.contexts.set(sharedKey, sharedContext);
     } else {
       // Always update reference to latest main session context
-      sharedContext.conversationHistory = this.mainSessionContext || [];
+      sharedContext.conversationHistory = this.mainSessionContext; // Direct reference
       sharedContext.lastAccessedAt = new Date();
     }
 
@@ -114,14 +114,48 @@ export class ContextManager {
   ): void {
     if (mode === 'shared') {
       // Shared mode: add to main session context
-      if (this.mainSessionContext) {
-        this.mainSessionContext.push(message);
-      }
+      // mainSessionContext is now guaranteed to be an array (initialized in constructor)
+      this.mainSessionContext.push(message);
     } else {
       // Isolated mode: add to agent's own context
       const context = this.getContext(agentName, 'isolated');
       context.conversationHistory.push(message);
     }
+  }
+
+  /**
+   * Add a hybrid mode summary to main session
+   * Used by hybrid mode to write only the final summary to main session context
+   *
+   * @param agentName - Agent name
+   * @param summary - Summary message to add
+   */
+  addHybridSummary(agentName: string, summary: UnifiedMessage): void {
+    // Add special metadata to indicate this is a hybrid summary
+    const annotatedSummary: UnifiedMessage = {
+      ...summary,
+      metadata: {
+        ...summary.metadata,
+        source: 'hybrid_agent',
+        agentName,
+        timestamp: new Date().toISOString(),
+      }
+    };
+
+    // Get summary text for logging
+    // const firstContent = summary.content[0];
+    // const summaryText: string = (firstContent?.type === 'text' && firstContent.text) ? firstContent.text : '<non-text>';
+
+    // Create clean preview (single line, no newlines)
+    // const cleanText = summaryText.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    // const previewLength = Math.min(150, cleanText.length);
+    // const preview = cleanText.substring(0, previewLength) + (previewLength < cleanText.length ? '...' : '');
+
+    // Log hybrid summary addition (always visible like Router/AgentExecutor logs)
+    // console.error(`[HybridMode] Adding to main session: agent=${agentName}, length=${summaryText.length} chars, session: ${this.mainSessionContext.length} -> ${this.mainSessionContext.length + 1}`);
+    // console.error(`[HybridMode] Summary preview: ${preview}`);
+
+    this.mainSessionContext.push(annotatedSummary);
   }
 
   /**

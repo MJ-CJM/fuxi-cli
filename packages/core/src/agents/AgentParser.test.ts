@@ -53,6 +53,7 @@ describe('AgentParser', () => {
         kind: 'agent',
         name: 'minimal',
         title: 'Minimal Agent',
+        description: 'A minimal test agent for testing purposes',
         systemPrompt: 'Minimal prompt',
         filePath: '/test/minimal.md',
         createdAt: new Date(),
@@ -64,8 +65,8 @@ describe('AgentParser', () => {
       expect(result).toContain('kind: agent');
       expect(result).toContain('name: minimal');
       expect(result).toContain('title: Minimal Agent');
+      expect(result).toContain('description:'); // Description is now required
       expect(result).toContain('Minimal prompt');
-      expect(result).not.toContain('description:');
       expect(result).not.toContain('tools:');
     });
   });
@@ -84,6 +85,7 @@ describe('AgentParser', () => {
         kind: 'agent',
         name: 'test-agent',
         title: 'Test',
+        description: 'Test agent for name validation',
         systemPrompt: 'test',
         filePath: '/path/test-agent.md',
         createdAt: new Date(),
@@ -100,6 +102,7 @@ describe('AgentParser', () => {
         kind: 'agent',
         name: 'different-name',
         title: 'Test',
+        description: 'Test agent with mismatched name',
         systemPrompt: 'test',
         filePath: '/path/test-agent.md',
         createdAt: new Date(),

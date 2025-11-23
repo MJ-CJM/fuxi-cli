@@ -32,7 +32,7 @@
 # 构建项目
 npm run build
 
-# 启动 tiangong-cli
+# 启动 fuxi-cli
 npm start
 ```
 

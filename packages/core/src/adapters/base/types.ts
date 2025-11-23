@@ -135,6 +135,7 @@ export interface ContentPart {
 export interface UnifiedMessage {
   role: MessageRole;
   content: ContentPart[];
+  metadata?: Record<string, any>; // Optional metadata for message annotations
 }
 
 /**

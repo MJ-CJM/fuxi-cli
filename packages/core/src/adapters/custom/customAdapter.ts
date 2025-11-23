@@ -100,6 +100,22 @@ export class CustomAdapter extends AbstractModelClient {
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
     const headers = this.getHeaders();
 
+    if (process.env['DEBUG_CUSTOM_MODEL_REQUESTS']) {
+      try {
+        console.log('[CustomAdapter] Sending request', {
+          url,
+          body,
+          provider: this.config.provider,
+          model: this.config.model,
+        });
+      } catch (error) {
+        console.warn(
+          '[CustomAdapter] Failed to log request payload for debugging:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers,
@@ -450,20 +466,35 @@ export class CustomAdapter extends AbstractModelClient {
    * Convert UnifiedRequest based on response format
    */
   private convertRequest(request: UnifiedRequest): any {
+    let customRequest: any;
+
     switch (this.responseFormat) {
       case CustomResponseFormat.OPENAI:
         const supportsMultimodal = this.config.capabilities?.supportsMultimodal ?? true;
         const openaiRequest = APITranslator.unifiedToOpenaiRequest(request, supportsMultimodal);
         openaiRequest.model = this.config.model;
-        return openaiRequest;
+        customRequest = openaiRequest;
+        break;
 
       case CustomResponseFormat.CLAUDE:
-        return this.convertToClaudeRequest(request);
+        customRequest = this.convertToClaudeRequest(request);
+        break;
 
       case CustomResponseFormat.RAW:
       default:
-        return this.convertToRawRequest(request);
+        customRequest = this.convertToRawRequest(request);
+        break;
     }
+
+    const extraParams = this.config.options?.['requestBody'];
+    if (extraParams && typeof extraParams === 'object' && !Array.isArray(extraParams)) {
+      customRequest = {
+        ...extraParams,
+        ...customRequest,
+      };
+    }
+
+    return customRequest;
   }
 
   /**
@@ -630,15 +661,23 @@ export class CustomAdapter extends AbstractModelClient {
    * Count tokens for the request (estimate)
    */
   async countTokens(request: UnifiedRequest): Promise<TokenCountResponse> {
-    // For custom APIs, we'll use the same estimation as OpenAI
+    // Universal token estimation algorithm for custom models
+    // Supports mixed Chinese and English content
     const textContent = request.messages
       .flatMap(msg => msg.content)
       .filter(part => part.type === 'text')
       .map(part => part.text || '')
       .join(' ');
 
-    // Rough estimation: ~4 characters per token
-    const estimatedTokens = Math.ceil(textContent.length / 4);
+    // Improved estimation:
+    // - Chinese characters: ~1.5 chars per token (CJK tokenizers are more efficient)
+    // - English/other: ~4 chars per token (standard GPT tokenizer ratio)
+    const chineseRegex = /[\u4e00-\u9fa5]/g;
+    const chineseMatches = textContent.match(chineseRegex);
+    const chineseChars = chineseMatches ? chineseMatches.length : 0;
+    const otherChars = textContent.length - chineseChars;
+
+    const estimatedTokens = Math.ceil(chineseChars / 1.5 + otherChars / 4);
 
     return {
       tokenCount: estimatedTokens

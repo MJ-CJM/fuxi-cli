@@ -27,6 +27,7 @@ describe('HandoffManager', () => {
     kind: 'agent',
     name,
     title: `${name} Agent`,
+    description: `Test agent for ${name}`,
     systemPrompt: 'test',
     filePath: `/test/${name}.md`,
     handoffs,

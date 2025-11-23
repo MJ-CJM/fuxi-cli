@@ -24,7 +24,7 @@ const addFormatsFunc = (addFormats as any).default || addFormats;
 
 const AGENT_SCHEMA = {
   type: 'object',
-  required: ['kind', 'name', 'title'],
+  required: ['kind', 'name', 'title', 'description'],
   properties: {
     kind: {
       type: 'string',
@@ -43,6 +43,7 @@ const AGENT_SCHEMA = {
     },
     description: {
       type: 'string',
+      minLength: 1,
       maxLength: 1000,
     },
     model: {
@@ -61,7 +62,7 @@ const AGENT_SCHEMA = {
     },
     contextMode: {
       type: 'string',
-      enum: ['isolated', 'shared'],
+      enum: ['isolated', 'shared', 'hybrid'],
     },
     tools: {
       type: 'object',
@@ -191,10 +192,16 @@ export class AgentValidator {
         errors.push(`Agent name must be lowercase alphanumeric with hyphens and underscores only: '${definition.name}'`);
       }
 
-      // Check reserved names
-      const reservedNames = ['default', 'main', 'system', 'temp', 'test'];
+      // Check reserved names (only truly conflicting names)
+      const reservedNames = ['default', 'system'];
       if (reservedNames.includes(definition.name)) {
-        errors.push(`Agent name '${definition.name}' is reserved`);
+        errors.push(`Agent name '${definition.name}' is reserved for system use`);
+      }
+
+      // Warn about potentially confusing names (but allow them)
+      const discouragedNames = ['main', 'temp', 'admin', 'root', 'config'];
+      if (discouragedNames.includes(definition.name)) {
+        warnings.push(`Agent name '${definition.name}' may be confusing. Consider a more descriptive name.`);
       }
     }
 

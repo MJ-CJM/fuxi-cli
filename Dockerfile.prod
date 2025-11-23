@@ -1,0 +1,73 @@
+# Production Dockerfile for Fuxi CLI
+# This Dockerfile packages the entire application into a single image
+# Usage: docker build -f Dockerfile.prod -t fuxi-cli:latest .
+
+# Build stage
+FROM docker.io/library/node:20-slim AS builder
+
+# Install build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3 \
+  make \
+  g++ \
+  git \
+  curl \
+  ca-certificates \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first (for better layer caching)
+COPY package.json package-lock.json ./
+COPY packages/*/package.json ./packages/*/
+
+# Install dependencies
+# Proxy can be configured via build args if needed:
+# docker build --build-arg HTTP_PROXY=... --build-arg HTTPS_PROXY=... -f Dockerfile.prod -t fuxi-cli:latest .
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY}
+ENV HTTPS_PROXY=${HTTPS_PROXY}
+ENV NO_PROXY=${NO_PROXY}
+
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM docker.io/library/node:20-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 node && \
+    mkdir -p /app && \
+    chown -R node:node /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy built files from builder
+COPY --from=builder --chown=node:node /app/bundle ./bundle
+COPY --from=builder --chown=node:node /app/package.json ./
+
+# Switch to non-root user
+USER node
+
+# Set entrypoint
+ENTRYPOINT ["node", "bundle/fuxi-cli.js"]
+
+# Default command
+CMD ["--help"]
+

@@ -1069,6 +1069,16 @@ const SETTINGS_SCHEMA = {
         description: 'Enable experimental subagents.',
         showInDialog: false,
       },
+      agentRoutingForCommands: {
+        type: 'string',
+        label: 'Agent Routing for Commands',
+        category: 'Experimental',
+        requiresRestart: false,
+        default: 'auto' as 'auto' | 'enabled' | 'disabled',
+        description:
+          'Control agent routing for plan/todo/spec commands. "auto" = enable if agents exist and routing is enabled, "enabled" = always enable, "disabled" = always disable.',
+        showInDialog: true,
+      },
     },
   },
 

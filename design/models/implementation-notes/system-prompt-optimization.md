@@ -122,10 +122,10 @@ export DEBUG_MESSAGE_FORMAT=1
 
 ```bash
 # 测试 Qwen
-tiangong "你是谁?" --model qwen3-coder-flash
+fuxi-cli "你是谁?" --model qwen3-coder-flash
 
 # 测试 DeepSeek
-tiangong "你是谁?" --model deepseek-coder
+fuxi-cli "你是谁?" --model deepseek-coder
 
 # 切换模型(保持上下文)
 /model deepseek-coder

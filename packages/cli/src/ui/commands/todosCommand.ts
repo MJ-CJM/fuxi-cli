@@ -56,7 +56,7 @@ export const todosCommand: SlashCommand = {
 
     {
       name: 'execute',
-      description: 'Execute a single todo: /todos execute <id> [--mode=auto_edit|default]',
+      description: 'Execute a single todo: /todos execute <id> [--mode=auto_edit|default] [--agent=<name>] [--no-routing]',
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext, args?: string) => {
         if (!args || args.trim() === '') {
@@ -64,10 +64,12 @@ export const todosCommand: SlashCommand = {
             {
               type: MessageType.ERROR,
               text:
-                'Usage: /todos execute <id> [--mode=auto_edit|default]\n\n' +
+                'Usage: /todos execute <id> [--mode=auto_edit|default] [--agent=<name>] [--no-routing]\n\n' +
                 'Examples:\n' +
                 '  /todos execute step-1\n' +
-                '  /todos execute step-2 --mode=auto_edit',
+                '  /todos execute step-2 --mode=auto_edit\n' +
+                '  /todos execute step-3 --agent=planner\n' +
+                '  /todos execute step-4 --no-routing',
             },
             Date.now(),
           );
@@ -92,6 +94,15 @@ export const todosCommand: SlashCommand = {
         const todoId = parts[0];
         const modeMatch = args.match(/--mode=(auto_edit|default)/);
         const approvalMode = modeMatch ? modeMatch[1] : 'default';
+
+        // Parse agent-related flags (support both --agent=name and --agent name)
+        const agentMatch = args.match(/--agent[=\s]+(\S+)/);
+        const agent = agentMatch ? agentMatch[1] : undefined;
+        const noRouting = args.includes('--no-routing');
+
+        // Debug: log parsed agent options
+        console.log('[TODO_EXECUTE] Parsed args:', { args, agent, noRouting });
+          // No debug noise here; agent info is shown later if applicable.
 
         // Find todo
         const todo = todos.find((t: any) => t.id === todoId);
@@ -120,6 +131,20 @@ export const todosCommand: SlashCommand = {
             Date.now(),
           );
           return;
+        }
+
+        // Exit Plan mode if active (todo execution requires write permissions)
+        const planModeActive = (context.session as any).planModeActive;
+        const setPlanModeActive = (context.session as any).setPlanModeActive;
+        if (planModeActive && setPlanModeActive) {
+          setPlanModeActive(false);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: '📋 **Exited Plan Mode** - Todo execution requires write permissions',
+            },
+            Date.now(),
+          );
         }
 
         // Save original approval mode
@@ -173,21 +198,25 @@ export const todosCommand: SlashCommand = {
           // Build execution prompt
           const plan = (context.session as any).currentPlan;
           let prompt = `Execute this task: ${todo.description}\n\n`;
-          
+
           if (plan) {
             prompt += `Context from plan: ${plan.overview}\n\n`;
           }
-          
+
           if (todo.risks && todo.risks.length > 0) {
             prompt += `⚠️ Risks to consider:\n${todo.risks.map((r: string) => `- ${r}`).join('\n')}\n\n`;
           }
-          
+
           prompt += `Complete this task thoroughly and report when done.`;
+
+          // Build agentOptions - agent info will be displayed by useGeminiStream
+          const agentOptionsToReturn = (agent || noRouting) ? { agent, noRouting } : undefined;
 
           // Return prompt to be submitted to Gemini
           return {
             type: 'submit_prompt',
             content: prompt,
+            agentOptions: agentOptionsToReturn,
           };
 
         } finally {
@@ -315,7 +344,7 @@ export const todosCommand: SlashCommand = {
 
     {
       name: 'execute-all',
-      description: 'Execute all pending todos in order: /todos execute-all [--mode=auto_edit|default]',
+      description: 'Execute all pending todos in order: /todos execute-all [--mode=auto_edit|default] [--agent=<name>] [--no-routing]',
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext, args?: string) => {
         const todos = (context.session as any).todos || [];
@@ -334,6 +363,11 @@ export const todosCommand: SlashCommand = {
         // Parse mode argument
         const modeMatch = args?.match(/--mode=(auto_edit|default)/);
         const mode = modeMatch ? modeMatch[1] : 'default';
+
+        // Parse agent-related flags (support both --agent=name and --agent name)
+        const agentMatch = args?.match(/--agent[=\s]+(\S+)/);
+        const agent = agentMatch ? agentMatch[1] : undefined;
+        const noRouting = args?.includes('--no-routing') || false;
 
         // Get pending todos count
         const pendingTodos = todos.filter((t: any) => t.status === 'pending');
@@ -362,6 +396,20 @@ export const todosCommand: SlashCommand = {
             Date.now(),
           );
           return;
+        }
+
+        // Exit Plan mode if active (batch execution requires write permissions)
+        const planModeActive = (context.session as any).planModeActive;
+        const setPlanModeActive = (context.session as any).setPlanModeActive;
+        if (planModeActive && setPlanModeActive) {
+          setPlanModeActive(false);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: '📋 **Exited Plan Mode** - Batch execution requires write permissions',
+            },
+            Date.now(),
+          );
         }
 
         // Initialize execution queue
@@ -417,13 +465,14 @@ export const todosCommand: SlashCommand = {
           if (nextTodo.risks && nextTodo.risks.length > 0) {
             prompt += `⚠️ Risks to consider:\n${nextTodo.risks.map((r: string) => `- ${r}`).join('\n')}\n\n`;
           }
-          
+
           prompt += `Complete this task thoroughly and report when done.`;
 
           // Return prompt to be submitted to Gemini
           return {
             type: 'submit_prompt',
             content: prompt,
+            agentOptions: (agent || noRouting) ? { agent, noRouting } : undefined,
           };
 
         } catch (error) {
@@ -461,4 +510,3 @@ export const todosCommand: SlashCommand = {
     },
   ],
 };
-

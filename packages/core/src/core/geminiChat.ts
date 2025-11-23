@@ -257,6 +257,14 @@ export class GeminiChat {
     this.history.push(userContent);
     const requestContents = this.getHistory(true);
 
+    // DEBUG: Print complete history before sending request to model
+    // console.error('\n' + '='.repeat(100));
+    // console.error(`[MainSession] 📤 SENDING REQUEST TO MODEL (${model})`);
+    // console.error(`[MainSession] 📊 History count: ${requestContents.length} messages`);
+    // console.error(`[MainSession] 📋 Complete conversation history:`);
+    // console.error(JSON.stringify(requestContents, null, 2));
+    // console.error('='.repeat(100) + '\n');
+
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return (async function* () {
