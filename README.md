@@ -69,7 +69,7 @@ fuxi-cli
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chenjiamin/fuxi-cli.git
+git clone https://github.com/MJ-CJM/fuxi-cli.git
 cd fuxi-cli
 
 # 安装依赖
@@ -94,7 +94,7 @@ npm start
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chenjiamin/fuxi-cli.git
+git clone https://github.com/MJ-CJM/fuxi-cli.git
 cd fuxi-cli
 
 # 构建开发镜像（只包含编译工具，不包含代码）
